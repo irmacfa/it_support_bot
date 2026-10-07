@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>آپلود فایل | پنل مدیریت</title>
+<style>
+
+/* --- نوار مانیتورینگ --- */
+.mon-strip {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch;
+  margin-bottom: 16px;
+}
+.ms-item {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 13px; text-decoration: none;
+  transition: border-color .15s, transform .15s;
+  min-height: 40px;
+}
+.ms-item:hover { border-color: var(--accent); transform: translateY(-1px); }
+.ms-item b { font-size: 1.05rem; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+.ms-item span { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+.ms-item small { font-size: 0.68rem; color: var(--muted); opacity: 0.85; }
+.ms-item.ms-red { border-color: rgba(239,68,68,.4); }
+.ms-item.ms-red b { color: var(--red); }
+.ms-item.ms-yellow { border-color: rgba(245,158,11,.4); }
+.ms-item.ms-yellow b { color: var(--yellow); }
+.ms-item.ms-green b { color: var(--green); }
+.ms-item.ms-link { background: transparent; border-style: dashed; margin-inline-start: auto; color: var(--accent); }
+.ms-item.ms-link span, .ms-item.ms-link { color: var(--accent); font-size: 0.78rem; }
+.ms-item.ms-link b { color: var(--accent); }
+.ms-time { font-size: 0.68rem; color: var(--muted); align-self: center; opacity: .7; }
+@media (max-width: 640px) { .ms-item.ms-link { margin-inline-start: 0; } }
+
+/* --- چیدمان ساده‌ی صفحه --- */
+h3.sec { font-size: .92rem; color: var(--text); margin: 0 0 12px; }
+h3.sec small { font-weight: 400; color: var(--muted); font-size: .74rem; margin-right: 8px; }
+h4.sub { font-size: .78rem; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+.bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.bar form { margin: 0; }
+table.mini { width: 100%; font-size: .8rem; border-collapse: collapse; }
+table.mini th, table.mini td { padding: 7px 9px; border-bottom: 1px solid var(--border); text-align: right; vertical-align: top; }
+table.mini th { color: var(--muted); font-weight: 600; font-size: .73rem; }
+table.mini tr:last-child td { border-bottom: none; }
+table.mini td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.mini td.col-name { color: var(--accent); direction: ltr; text-align: left; }
+.fold { border: 1px solid var(--border); border-radius: 8px; background: var(--card2); margin-top: 8px; }
+.fold > summary { padding: 9px 12px; cursor: pointer; font-size: .84rem; color: var(--text); }
+.fold > summary b { color: var(--accent); }
+.fold > summary span { color: var(--muted); font-size: .75rem; }
+.fold > .fold-body { padding: 2px 12px 12px; }
+.route { white-space: pre-line; font-size: .79rem; color: var(--muted); background: var(--card2);
+         border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.note { font-size: .77rem; color: var(--muted); margin-top: 8px; line-height: 1.8; }
+.divider { height: 1px; background: var(--border); margin: 26px 0; border: none; }
+
+/* --- فرم‌ها --- */
+.mode-box { display: flex; flex-direction: column; gap: 7px; margin: 12px 0;
+            background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.mode { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: .84rem; }
+.mode input { margin-top: 3px; accent-color: var(--accent); }
+.mode span { display: flex; flex-direction: column; }
+.mode em { font-style: normal; font-size: .74rem; color: var(--muted); margin-top: 2px; }
+.hint { font-size: .78rem; color: var(--muted); margin: 10px 0 0; line-height: 1.85; }
+.status { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+.btn-outline {
+  padding: 8px 16px; background: transparent; border: 1px solid var(--border);
+  color: var(--muted); border-radius: 8px; font-size: .85rem;
+  cursor: pointer; font-family: inherit; transition: all .15s; text-decoration: none; display: inline-block;
+}
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-sm { padding: 6px 14px; font-size: .82rem; border-radius: 8px; }
+select {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font-size: .8rem; font-family: inherit; min-width: 230px;
+}
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: .72rem;
+  background: rgba(59,130,246,.15); color: var(--accent); border: 1px solid var(--accent);
+}
+.badge.warn { background: rgba(245,158,11,.12); color: var(--yellow); border-color: var(--yellow); }
+.badge.ok { background: rgba(16,185,129,.12); color: var(--green); border-color: var(--green); }
+.badge-new { display: inline-block; font-size: .66rem; padding: 1px 6px; border-radius: 20px;
+             background: var(--accent); color: #fff; vertical-align: middle; margin-right: 4px; }
+
+/* --- مدال فیلدها --- */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  z-index: 1000; justify-content: center; align-items: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  width: 90%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column;
+}
+.modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.modal-head h3 { font-size: 0.95rem; color: var(--text); margin: 0; }
+.modal-close {
+  background: none; border: none; color: var(--muted); font-size: 1.3rem;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.modal-close:hover { background: var(--card2); color: var(--text); }
+.modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.modal-foot {
+  padding: 12px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-start;
+}
+.field-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin-bottom: 6px;
+  background: var(--card2); border: 1px solid var(--border); border-radius: 8px;
+  cursor: grab; transition: all .15s;
+}
+.field-item:active { cursor: grabbing; }
+.field-item.dragging { opacity: .4; border-color: var(--accent); }
+.field-item.hidden-field { opacity: .45; }
+.sheet-title-box {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin-bottom: 10px;
+  background: var(--card); border: 1px dashed var(--border); border-radius: 8px;
+}
+.field-handle { color: var(--muted); font-size: 1.1rem; flex-shrink: 0; user-select: none; cursor: grab; }
+.field-col-name { font-size: 0.78rem; color: var(--muted); flex-shrink: 0; direction: ltr; }
+.field-label-wrap { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.field-label { font-size: 0.88rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field-label-input { flex: 1; min-width: 60px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 6px; background: var(--card); color: var(--text); font-size: 0.85rem; font-family: inherit; }
+.btn-icon {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; flex-shrink: 0;
+  background: transparent; color: var(--muted); transition: all .15s;
+}
+.btn-icon:hover { background: var(--card2); color: var(--text); }
+.btn-icon.confirm { color: #22c55e; }
+.btn-icon.confirm:hover { background: rgba(34,197,94,.15); }
+.btn-icon.edit { color: var(--accent); }
+.field-toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.field-toggle input { opacity: 0; width: 0; height: 0; }
+.field-toggle .slider { position: absolute; inset: 0; background: var(--border); border-radius: 22px; cursor: pointer; transition: .2s; }
+.field-toggle .slider::before {
+  content: ""; position: absolute; width: 16px; height: 16px;
+  right: 3px; top: 3px; background: var(--muted); border-radius: 50%; transition: .2s;
+}
+.field-toggle input:checked + .slider { background: var(--accent); }
+.field-toggle input:checked + .slider::before { transform: translateX(-16px); background: #fff; }
+.sheet-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.sheet-tab {
+  padding: 6px 14px; border-radius: 8px; font-size: 0.82rem;
+  background: var(--card2); border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.sheet-tab.active { background: rgba(59,130,246,.15); color: var(--accent); border-color: var(--accent); }
+.sheet-tab:hover { color: var(--text); }
+.sheet-content { display: none; }
+.sheet-content.active { display: block; }
+</style>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">آپلود فایل‌ها</div>
+    <div class="content">
+
+        {% set pending = datasets | selectattr('preview') | list %}
+        {% set ns = namespace(entries=0) %}
+        {% for d in datasets %}
+            {% if d.preview and d.preview.diff and d.preview.diff.entries %}
+                {% set ns.entries = ns.entries + (d.preview.diff.entries | length) %}
+            {% endif %}
+        {% endfor %}
+
+        {# ================= نوار مانیتورینگ ================= #}
+        {% set mk = monitor_kpis %}
+        <div class="mon-strip" id="monStrip">
+            <a class="ms-item ms-green" href="/monitor" title="آنلاین: زیر ۱۵ دقیقه پیش پیام دادن">
+                <b id="mkOnline">{{ mk.states.online }}</b><span>🟢 آنلاین</span>
+            </a>
+            <a class="ms-item" href="/monitor" title="امروز توی ربات چیزی استفاده کردن">
+                <b id="mkToday">{{ mk.active_today }}</b><span>📊 فعال امروز</span>
+            </a>
+            <a class="ms-item" href="/monitor" title="آفلاین ولی قبلاً کار می‌کردن">
+                <b id="mkIdle">{{ mk.states.idle }}</b><span>⚪ آفلاین</span>
+            </a>
+            <a class="ms-item ms-red" href="/monitor" title="فروشگاه فعالی که توی فایل «{{ expert_unset_label }}» علامت خورده">
+                <b id="mkNoExpert">{{ mk.stores.effective_unassigned }}</b><span>🚫 بدون کارشناس</span>
+                <small>{{ mk.stores.effective_pct }}٪</small>
+            </a>
+            <a class="ms-item ms-yellow" href="/monitor" title="فروشگاه‌های محمد شیری: چون منفک شده، هنوز کارشناس ندارن">
+                <b id="mkSeparated">{{ mk.stores.separated_count }}</b><span>🧍 منفک</span>
+                <small>{% for g in mk.stores.separated_groups %}{{ g.expert }}{% if not loop.last %}، {% endif %}{% endfor %}</small>
+            </a>
+            <a class="ms-item" href="/monitor" title="فروشگاه‌های بسته حساب نمی‌شن">
+                <b id="mkTotal">{{ mk.stores.total }}</b><span>🏪 فروشگاه فعال</span>
+                <small>{{ mk.stores.closed }} بسته</small>
+            </a>
+            <a class="ms-item ms-link" href="/monitor">
+                🧬 جزئیات مانیتورینگ <span>←</span>
+            </a>
+            <span class="ms-time" id="monStripStamp">{{ mk.generated_jalali }}</span>
+        </div>
+
+        {# ================= پیام ================= #}
+        {% if flash and flash.message %}
+        <div class="msg {{ 'success' if flash.success else ('error' if flash.success is not none else '') }}">{{ flash.message }}</div>
+        {% endif %}
+
+        {# ================= ۱) آپلود ================= #}
+        <div class="card">
+            <h3 class="sec">۱) آپلود فایل فروشگاه‌ها <small>اکسل یا CSV — می‌تونه شارژ، اطلاعات یا هر دو باشه</small></h3>
+            {% if pending %}
+            <p class="hint" style="margin-top:0;">
+                فایل بررسی شد و تغییراتش پایین همین صفحه نیومده. تا وقتی «اعمال» نزنی هیچ تغییری اعمال نمیشه.
+            </p>
+            <div class="bar">
+                <a href="/upload" class="btn-outline">📄 بررسی فایل جدید</a>
+                <a href="/data" class="btn-outline">👁️ نمایش کامل دیتا</a>
+            </div>
+            {% else %}
+            <form method="post" action="/upload" enctype="multipart/form-data">
+                <input type="file" name="files" accept=".xlsx,.xlsm,.csv" multiple required>
+                <div class="mode-box">
+                    <label class="mode"><input type="radio" name="mode" value="auto" checked>
+                        <span><b>🤖 خودکار <span class="badge-new">پیشنهادی</span></b><em>فایل با قبلی مقایسه می‌شه: اگه تقریباً کل کدهای فعلی توش باشه جایگزینی، وگرنه ادغام.</em></span>
+                    </label>
+                    <label class="mode"><input type="radio" name="mode" value="merge">
+                        <span><b>فقط تغییرات</b><em>جدید اضافه، تغییرکرده جایگزین، بقیه دست‌نخورده</em></span>
+                    </label>
+                    <label class="mode"><input type="radio" name="mode" value="replace">
+                        <span><b>جایگزینی کامل</b><em>کل داده‌ی قبلی پاک می‌شه</em></span>
+                    </label>
+                    <label class="mode"><input type="checkbox" name="drop_missing" value="1">
+                        <span><b>کدهای غایب هم حذف بشن</b><em>پیش‌فرض خاموشه</em></span>
+                    </label>
+                </div>
+                <button type="submit">۲) بررسی و نمایش تغییرات</button>
+            </form>
+            <p class="hint">
+                هر شیت جدا بررسی و دسته‌بندی می‌شه؛ یک فایل قاطی هم درست کار می‌کنه و شیت‌های
+                شارژ و اطلاعات از هم جدا می‌شن. شیت‌های بی‌ربط (مثل «مدیران») خودکار کنار گذاشته می‌شن
+                و شیت‌های جاافتاده از فایل قبلی حفظ می‌شن.
+            </p>
+            <div class="bar">
+                <form method="post" action="/upload/rescan">
+                    <button type="submit" class="btn-outline">🔄 بازخوانی فایل‌های فعلی</button>
+                </form>
+                <a href="/data" class="btn-outline">👁️ نمایش کامل دیتا</a>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ================= ۲) پیش‌نمایش ================= #}
+        {% if pending %}
+        <div class="card">
+            <h3 class="sec">۳) تغییرات پیدا‌شده <small>هنوز اعمال نشده</small></h3>
+            {% if route %}<div class="route">{{ route }}</div>{% endif %}
+
+            <table class="mini">
+                <thead>
+                    <tr><th>بخش</th><th>جدید</th><th>تغییرکرده</th><th>حذف‌شده</th><th>بدون تغییر</th><th>حالت</th></tr>
+                </thead>
+                <tbody>
+                {% for d in pending %}
+                    <tr>
+                        <td>{{ d.emoji }} {{ d.label }}</td>
+                        <td class="num">🆕 {{ d.preview.diff.counts.added if d.preview.diff else 0 }}</td>
+                        <td class="num">🔄 {{ d.preview.diff.counts.changed if d.preview.diff else 0 }}</td>
+                        <td class="num">➖ {{ d.preview.diff.counts.removed if d.preview.diff else 0 }}</td>
+                        <td class="num">✅ {{ d.preview.diff.counts.unchanged if d.preview.diff else 0 }}</td>
+                        <td>{% if d.preview.diff %}{{ 'فقط تغییرات' if d.preview.diff.effective_mode != 'replace' else '⚠️ جایگزینی کامل' }}{% else %}—{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if ns.entries %}
+            <h4 class="sub">جزئیات تغییرات (۶۰ مورد اول)</h4>
+            <div class="table-wrap">
+            <table class="mini">
+                <thead>
+                    <tr><th>بخش</th><th>کد</th><th>وضعیت</th><th>شیت</th><th>فیلدهای تغییرکرده (قدیم ← جدید)</th></tr>
+                </thead>
+                <tbody>
+                {% for d in pending %}
+                    {% if d.preview.diff and d.preview.diff.entries %}
+                    {% for e in d.preview.diff.entries[:60] %}
+                    <tr>
+                        <td>{{ d.label }}</td>
+                        <td class="col-name">{{ e.code }}</td>
+                        <td>{% if e.status == 'added' %}<span class="badge ok">جدید</span>
+                            {% elif e.status == 'changed' %}<span class="badge warn">تغییر</span>
+                            {% else %}<span class="badge">حذف</span>{% endif %}</td>
+                        <td style="font-size:.74rem;">{{ e.source }}</td>
+                        <td>
+                            {% for col, pair in e.fields.items() %}
+                            <div style="margin-bottom:3px;">
+                                <b style="color:var(--muted)">{{ col }}:</b>
+                                <span style="color:#f87171;text-decoration:line-through;">{{ pair[0] }}</span>
+                                ← <span style="color:var(--green)">{{ pair[1] }}</span>
+                            </div>
+                            {% endfor %}
+                            {% if e.status == 'changed' and not e.fields %}
+                            <span style="color:var(--muted)">
+                                تعداد رکوردها {{ e.records }} شد
+                                ({% if e.added_records %}+{{ e.added_records }} جدید{% endif %}
+                                {% if e.removed_records %}-{{ e.removed_records }} حذف{% endif %})
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% if ns.entries > 60 %}
+            <p class="note">و {{ ns.entries - 60 }} تغییر دیگه هست که اینجا نشون داده نشده.</p>
+            {% endif %}
+            {% else %}
+            <p class="note">هیچ تغییری نسبت به داده‌ی فعلی پیدا نشد.</p>
+            {% endif %}
+
+            <div class="bar">
+                <form method="post" action="/upload/apply">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit">۴) اعمال تغییرات روی دیتای فعال</button>
+                </form>
+                <form method="post" action="/upload/cancel">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn-outline">انصراف</button>
+                </form>
+            </div>
+            <p class="note">قبل از اعمال، از فایل‌های فعلی نسخه‌ی پشتیبان ساخته می‌شه.</p>
+        </div>
+        {% endif %}
+
+        {# ================= ۳) وضعیت فعلی ================= #}
+        <div class="card">
+            <h3 class="sec">وضعیت فعلی دیتا</h3>
+            <table class="mini">
+                <thead>
+                    <tr><th>بخش</th><th>کد فروشگاه</th><th>رکورد</th><th>فایل فعال</th><th>آخرین اعمال</th><th></th></tr>
+                </thead>
+                <tbody>
+                {% for d in datasets %}
+                <tr>
+                    <td>{{ d.emoji }} <b>{{ d.label }}</b></td>
+                    <td class="num">{{ d.loaded }}</td>
+                    <td class="num">{{ d.total_records }}</td>
+                    <td style="font-size:.76rem;">{{ d.files | join('، ') or '—' }}</td>
+                    <td style="font-size:.74rem;color:var(--muted);">
+                        {% if d.report.last_change %}
+                            {{ d.report.last_change.at }} —
+                            {{ 'فقط تغییرات' if d.report.last_change.mode == 'merge' else 'جایگزینی' }} —
+                            🆕{{ d.report.last_change.counts.added }} 🔄{{ d.report.last_change.counts.changed }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td><button type="button" class="btn-outline btn-sm"
+                               onclick="openFields('{{ d.field_type }}')">فیلدها</button></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% for d in datasets %}
+                {% if d.applied_diff %}
+                <p class="note">
+                    ✅ {{ d.label }} اعمال شد: 🆕 {{ d.applied_diff.counts.added }} جدید،
+                    🔄 {{ d.applied_diff.counts.changed }} تغییرکرده،
+                    ➖ {{ d.applied_diff.counts.removed }} حذف‌شده.
+                </p>
+                {% endif %}
+            {% endfor %}
+            <div class="bar">
+                <form method="post" action="/upload/rescan">
+                    <button type="submit" class="btn-outline">🔄 بازخوانی فایل‌های فعلی</button>
+                </form>
+                <a href="/data" class="btn-outline">👁️ نمایش کامل دیتا</a>
+            </div>
+        </div>
+
+        {# ================= ۴) گزارش و پشتیبان ================= #}
+        <div class="card">
+            <h3 class="sec">گزارش بررسی فایل و نسخه‌های پشتیبان</h3>
+            {% for d in datasets %}
+            <details class="fold">
+                <summary>
+                    <b>{{ d.emoji }} {{ d.label }}</b>
+                    <span>— {{ d.report.sheets | length if d.report.sheets else 0 }} شیت · {{ d.backups | length }} نسخه‌ی پشتیبان</span>
+                </summary>
+                <div class="fold-body">
+                    {% if d.report.sheets %}
+                    <table class="mini">
+                        <thead>
+                            <tr><th>شیت</th><th>ردیف</th><th>ایندکس</th><th>کد فروشگاه</th><th>شماره</th><th>وضعیت</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for s in d.report.sheets %}
+                        <tr>
+                            <td>{{ s.sheet }}<br><span style="color:var(--muted)">{{ s.file }}</span></td>
+                            <td class="num">{{ s.rows }}</td>
+                            <td class="num">{{ s.indexed }}</td>
+                            <td class="col-name">{{ s.code_col or '—' }}</td>
+                            <td class="col-name">{{ s.mobile_col or '—' }}</td>
+                            <td style="font-size:.74rem;">
+                                {% if s.skipped_reason %}
+                                    <span class="badge warn">ایندکس نشد</span><br>{{ s.skipped_reason }}
+                                {% else %}
+                                    <span class="badge ok">ایندکس شد</span>
+                                    {% if s.inferred %}<br><span class="badge warn">{{ s.inferred }} کد استنتاجی</span>{% endif %}
+                                    {% if s.no_code %}<br><span class="badge warn">{{ s.no_code }} ردیف بدون کد</span>{% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <p class="note">
+                        «کد استنتاجی» یعنی کد داخل متن ستون پیدا شده (مثل «جمع آوری از ۱۱۲۰»)، نه توی ستون کد مستقیم.
+                    </p>
+                    {% endif %}
+
+                    {% if d.backups %}
+                    <h4 class="sub">نسخه‌های پشتیبان</h4>
+                    <form method="post" action="/upload/restore" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <input type="hidden" name="kind" value="{{ d.key }}">
+                        <select name="backup">
+                            {% for b in d.backups %}
+                            <option value="{{ b.name }}">{{ b.name }}{% if b.files %} — {{ b.files | join('، ') }}{% endif %} ({{ b.size_kb }} KB)</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn-sm">بازگردانی</button>
+                    </form>
+                    {% else %}
+                    <p class="note">هنوز نسخه‌ی پشتیبانی وجود نداره.</p>
+                    {% endif %}
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+
+        <hr class="divider">
+
+        {# ================= ۵) شیفت (بخش جدا) ================= #}
+        <div class="card">
+            <h3 class="sec">📅 برنامه شیفت ماهانه <small>بخش جدا — ربطی به فایل فروشگاه‌ها نداره</small></h3>
+            {% if schedule_message %}
+            <div class="msg {{ 'success' if schedule_success else 'error' }}">{{ schedule_message }}</div>
+            {% endif %}
+            <form method="post" action="/schedule/upload" enctype="multipart/form-data">
+                <input type="file" name="schedule_file" accept=".pdf" required>
+                <button type="submit">آپلود برنامه شیفت</button>
+            </form>
+            <div class="status">تعداد روزهای شیفت بارگذاری‌شده: {{ loaded_days }}</div>
+        </div>
+
+    </div>
+</div>
+<!-- مدال فیلدها -->
+<div class="modal-overlay" id="fieldsModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">فیلدهای فایل اکسل</h3>
+      <button class="modal-close" onclick="closeFields()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="hint" id="sheetTitlesNote" style="display:none;margin:0 0 10px;">
+        عنوان هر شیت، تیتریه که اول هر بخش توی نتیجه‌ی ربات میاد. می‌تونی عنوانش رو عوض کنی
+        یا با خاموش‌کردن تیک، خودِ تیتر رو از نتیجه حذف کنی (داده‌ها سر جاشون می‌مونن).
+      </div>
+      <div class="sheet-tabs" id="sheetTabs"></div>
+      <div id="sheetContents"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" onclick="saveFieldsConfig()">ذخیره تنظیمات</button>
+      <button class="btn-outline btn-sm" onclick="closeFields()">بستن</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentFileType = null;
+let fieldsData = {};
+let sheetTitles = {};
+let dragSrc = null;
+
+const TITLES = {
+  stores: 'فیلدهای فایل شارژ فروشگاه‌ها',
+  info: 'فیلدهای فایل اطلاعات فروشگاه‌ها'
+};
+
+async function openFields(fileType) {
+  currentFileType = fileType;
+  document.getElementById('modalTitle').textContent = TITLES[fileType] || 'فیلدها';
+
+  try {
+    const resp = await fetch(`/api/fields/${fileType}`);
+    fieldsData = await resp.json();
+  } catch (e) {
+    fieldsData = {};
+  }
+
+  // عنوان شیت‌ها فقط برای فایل اطلاعات معنا داره (توی نتیجه‌ی ربات تیتر هر بخش می‌شه)
+  sheetTitles = {};
+  if (fileType === 'info') {
+    try {
+      const resp = await fetch('/api/sheet-titles/info');
+      sheetTitles = await resp.json();
+    } catch (e) {
+      sheetTitles = {};
+    }
+  }
+  document.getElementById('sheetTitlesNote').style.display = fileType === 'info' ? 'block' : 'none';
+
+  renderSheetTabs();
+  document.getElementById('fieldsModal').classList.add('active');
+}
+
+function closeFields() {
+  document.getElementById('fieldsModal').classList.remove('active');
+  currentFileType = null;
+  fieldsData = {};
+  sheetTitles = {};
+}
+
+function renderSheetTabs() {
+  const tabs = document.getElementById('sheetTabs');
+  const contents = document.getElementById('sheetContents');
+  tabs.innerHTML = '';
+  contents.innerHTML = '';
+
+  const sheets = Object.keys(fieldsData);
+  if (sheets.length === 0) {
+    contents.innerHTML = '<div class="empty">فایل اکسل آپلود نشده یا ستونی پیدا نشد.</div>';
+    return;
+  }
+
+  sheets.forEach((sheet, idx) => {
+    const tab = document.createElement('button');
+    tab.className = 'sheet-tab' + (idx === 0 ? ' active' : '');
+    // اگه عنوان سفارشی گذاشته شده، همون رو نشون بده تا وضعیت از بیرون پیدا باشه
+    const custom = currentFileType === 'info' && sheetTitles[sheet] ? sheetTitles[sheet].label : '';
+    tab.textContent = (custom && custom !== sheet) ? `${custom} (${sheet})` : sheet;
+    tab.onclick = () => switchSheet(sheet, tab);
+    tabs.appendChild(tab);
+
+    const div = document.createElement('div');
+    div.className = 'sheet-content' + (idx === 0 ? ' active' : '');
+    div.id = 'sheet-' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+    contents.appendChild(div);
+
+    renderFields(div, sheet);
+  });
+}
+
+function switchSheet(sheet, tab) {
+  document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sheet-content').forEach(c => c.classList.remove('active'));
+
+  if (tab) tab.classList.add('active');
+  const id = 'sheet-' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+  document.getElementById(id).classList.add('active');
+}
+
+function input_keydown(box) {
+  const input = box.querySelector('.field-label-input');
+  // از فوکوس خارج‌شدن هم استفاده کن تا تغییر با کلیک بیرون از فیلد هم از دست نره
+  input.addEventListener('blur', () => {
+    if (input.style.display === 'none') return;
+    const confirmBtn = box.querySelector('.confirm');
+    if (confirmBtn) confirmBtn.click();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      box.querySelector('.confirm').click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      input.style.display = 'none';
+      box.querySelector('.field-label').style.display = 'block';
+      box.querySelector('.edit').style.display = 'inline-flex';
+      box.querySelector('.confirm').style.display = 'none';
+    }
+  });
+}
+
+function renderFields(container, sheet) {
+  const data = fieldsData[sheet];
+  if (!data) return;
+
+  const hiddenSet = new Set(data.hidden || []);
+  const labels = data.labels || {};
+  container.innerHTML = '';
+
+  // عنوان شیت (فقط برای فایل اطلاعات) — قابل تغییر نام یا حذف تیتر از نتیجه
+  if (currentFileType === 'info') {
+    const title = sheetTitles[sheet] || {label: sheet, show: true};
+    const safeId = 'SHEET_' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+    const box = document.createElement('div');
+    box.className = 'sheet-title-box';
+    box.innerHTML = [
+      '<div class="field-label-wrap">',
+      '<span style="font-size:12px;color:var(--muted);">عنوان در نتیجه:</span>',
+      `<span class="field-label" id="title_${safeId}"></span>`,
+      `<input class="field-label-input" id="tinput_${safeId}" style="display:none">`,
+      `<button class="btn-icon edit" id="tedit_${safeId}" title="ویرایش">✏️</button>`,
+      `<button class="btn-icon confirm" id="tconfirm_${safeId}" title="تایید" style="display:none">✅</button>`,
+      '</div>',
+      '<label class="field-toggle" title="نمایش عنوان در نتیجه">',
+      `<input type="checkbox" ${title.show ? 'checked' : ''}>`,
+      '<span class="slider"></span>',
+      '</label>',
+    ].join('');
+    // متن تیتر باید از فایل جدا باشه (اسم شیت ممکنه «<» یا «&» داشته باشه)
+    box.querySelector('.field-label').textContent = title.label || sheet;
+    box.querySelector('input[type="checkbox"]').addEventListener('change', function () {
+      if (!sheetTitles[sheet]) sheetTitles[sheet] = {label: sheet, show: true};
+      sheetTitles[sheet].show = this.checked;
+    });
+    box.querySelector('.edit').addEventListener('click', () => {
+      const input = box.querySelector('.field-label-input');
+      input.value = (sheetTitles[sheet] && sheetTitles[sheet].label) || sheet;
+      box.querySelector('.field-label').style.display = 'none';
+      box.querySelector('.edit').style.display = 'none';
+      input.style.display = 'block';
+      box.querySelector('.confirm').style.display = 'inline-flex';
+      input.focus();
+    });
+    box.querySelector('.confirm').addEventListener('click', () => {
+      const input = box.querySelector('.field-label-input');
+      const value = input.value.trim() || sheet;
+      if (!sheetTitles[sheet]) sheetTitles[sheet] = {label: sheet, show: true};
+      sheetTitles[sheet].label = value;
+      box.querySelector('.field-label').textContent = value;
+      box.querySelector('.field-label').style.display = 'block';
+      input.style.display = 'none';
+      box.querySelector('.edit').style.display = 'inline-flex';
+      box.querySelector('.confirm').style.display = 'none';
+    });
+    input_keydown(box);
+    container.appendChild(box);
+  }
+
+  (data.columns || []).forEach(col => {
+    const item = document.createElement('div');
+    item.className = 'field-item' + (hiddenSet.has(col) ? ' hidden-field' : '');
+    item.draggable = true;
+    item.dataset.col = col;
+    item.dataset.sheet = sheet;
+
+    const safeId = col.replace(/[^a-zA-Z0-9]/g, '_');
+    const label = labels[col] || col;
+    item.innerHTML = [
+      '<span class="field-handle">⠿</span>',
+      '<div class="field-label-wrap">',
+      `<span class="field-label" id="label_${safeId}">${label}</span>`,
+      `<input class="field-label-input" id="input_${safeId}" value="${label.replace(/"/g, '&quot;')}" style="display:none">`,
+      `<button class="btn-icon edit" id="edit_${safeId}" title="ویرایش">✏️</button>`,
+      `<button class="btn-icon confirm" id="confirm_${safeId}" title="تایید" style="display:none">✅</button>`,
+      '</div>',
+      `<span class="field-col-name">(${col})</span>`,
+      '<label class="field-toggle">',
+      `<input type="checkbox" ${hiddenSet.has(col) ? '' : 'checked'}>`,
+      '<span class="slider"></span>',
+      '</label>',
+    ].join('');
+
+    item.addEventListener('dragstart', e => {
+      dragSrc = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      dragSrc = null;
+      container.querySelectorAll('.field-item').forEach(i => i.style.borderTop = '');
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragSrc && dragSrc !== item) {
+        item.style.borderTop = '2px solid var(--accent)';
+      }
+    });
+    item.addEventListener('dragleave', () => { item.style.borderTop = ''; });
+    item.addEventListener('drop', e => {
+      e.preventDefault();
+      item.style.borderTop = '';
+      if (dragSrc && dragSrc !== item) {
+        const items = [...container.querySelectorAll('.field-item')];
+        const srcIdx = items.indexOf(dragSrc);
+        const tgtIdx = items.indexOf(item);
+        if (srcIdx < tgtIdx) {
+          container.insertBefore(dragSrc, item.nextSibling);
+        } else {
+          container.insertBefore(dragSrc, item);
+        }
+        updateOrderFromDOM(sheet);
+      }
+    });
+    item.querySelector('input[type="checkbox"]').addEventListener('change', function () {
+      toggleField(sheet, col, this.checked);
+    });
+    item.querySelector('.edit').addEventListener('click', () => startEdit(sheet, col));
+    item.querySelector('.confirm').addEventListener('click', () => confirmEdit(sheet, col));
+    item.querySelector('.field-label-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); confirmEdit(sheet, col); }
+    });
+    item.querySelector('.field-label-input').addEventListener('blur', () => {
+      if (item.querySelector('.field-label-input').style.display === 'none') return;
+      confirmEdit(sheet, col);
+    });
+
+    container.appendChild(item);
+  });
+}
+
+function toggleField(sheet, col, visible) {
+  if (!fieldsData[sheet]) return;
+  const hidden = fieldsData[sheet].hidden || [];
+  if (visible) {
+    fieldsData[sheet].hidden = hidden.filter(c => c !== col);
+  } else {
+    if (!hidden.includes(col)) hidden.push(col);
+  }
+  const item = document.querySelector(`.field-item[data-col="${col}"]`);
+  if (item) item.classList.toggle('hidden-field', !visible);
+}
+
+function startEdit(sheet, col) {
+  const id = col.replace(/[^a-zA-Z0-9]/g, '_');
+  document.getElementById('label_' + id).style.display = 'none';
+  document.getElementById('edit_' + id).style.display = 'none';
+  const input = document.getElementById('input_' + id);
+  input.style.display = 'block';
+  input.focus();
+  document.getElementById('confirm_' + id).style.display = 'inline-flex';
+}
+
+function confirmEdit(sheet, col) {
+  const id = col.replace(/[^a-zA-Z0-9]/g, '_');
+  const input = document.getElementById('input_' + id);
+  const label = document.getElementById('label_' + id);
+  const newLabel = input.value.trim() || col;
+  label.textContent = newLabel;
+  label.style.display = 'block';
+  input.style.display = 'none';
+  document.getElementById('edit_' + id).style.display = 'inline-flex';
+  document.getElementById('confirm_' + id).style.display = 'none';
+  // save to fieldsData
+  if (!fieldsData[sheet]) return;
+  if (!fieldsData[sheet].labels) fieldsData[sheet].labels = {};
+  fieldsData[sheet].labels[col] = newLabel;
+}
+
+function updateOrderFromDOM(sheet) {
+  const id = 'sheet-' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+  const container = document.getElementById(id);
+  if (!container || !fieldsData[sheet]) return;
+  const items = [...container.querySelectorAll('.field-item')];
+  fieldsData[sheet].columns = items.map(i => i.dataset.col);
+  // collect labels from DOM
+  if (!fieldsData[sheet].labels) fieldsData[sheet].labels = {};
+  items.forEach(i => {
+    const col = i.dataset.col;
+    const labelEl = i.querySelector('.field-label');
+    if (labelEl) fieldsData[sheet].labels[col] = labelEl.textContent.trim();
+  });
+}
+
+function commitOpenInputs() {
+  // هر عنوانی که کاربر توش تایپ کرده ولی هنوز با ✅ یا Enter تأیید نکرده،
+  // همین‌جا نهایی می‌شه تا با زدن «ذخیره تنظیمات» متنش گم نشه.
+  document.querySelectorAll('#sheetContents .field-label-input').forEach(input => {
+    if (input.style.display === 'none') return;
+    const box = input.closest('.field-item, .sheet-title-box');
+    if (!box) return;
+    const confirmBtn = box.querySelector('.confirm');
+    if (confirmBtn) confirmBtn.click();
+  });
+}
+
+async function saveFieldsConfig() {
+  commitOpenInputs();
+  Object.keys(fieldsData).forEach(sheet => updateOrderFromDOM(sheet));
+
+  try {
+    const resp = await fetch(`/api/fields/${currentFileType}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(fieldsData)
+    });
+    const result = await resp.json();
+    if (!result.ok) {
+      alert('خطا در ذخیره‌سازی.');
+      return;
+    }
+
+    // عنوان شیت‌های اطلاعات رو جدا ذخیره کن
+    if (currentFileType === 'info' && Object.keys(sheetTitles).length) {
+      const payload = {};
+      Object.keys(sheetTitles).forEach(sheet => {
+        payload[sheet] = {label: sheetTitles[sheet].label || '', hidden: !sheetTitles[sheet].show};
+      });
+      const tResp = await fetch('/api/sheet-titles/info', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const tResult = await tResp.json();
+      if (!tResult.ok) {
+        alert('خطا در ذخیره‌سازی عنوان شیت‌ها.');
+        return;
+      }
+    }
+
+    alert('تنظیمات ذخیره شد.');
+  } catch (e) {
+    alert('خطا در ارتباط با سرور.');
+  }
+}
+
+document.getElementById('fieldsModal').addEventListener('click', function(e) {
+  if (e.target === this) closeFields();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeFields();
+});
+</script>
+
+<script>
+(function () {
+  let timer = setInterval(tick, 60000);
+  async function tick() {
+    try {
+      const res = await fetch('/api/monitor', { credentials: 'same-origin' });
+      if (res.status === 401) { clearInterval(timer); return; }
+      const d = await res.json();
+      if (d.error) return;
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('mkOnline', d.states.online);
+      set('mkToday', d.active_today);
+      set('mkIdle', d.states.idle);
+      set('mkNoExpert', d.stores.effective_unassigned);
+      set('mkSeparated', d.stores.separated_count);
+      set('mkTotal', d.stores.total);
+      set('monStripStamp', d.generated_jalali);
+    } catch (e) { /* قطعی شبکه */ }
+  }
+})();
+</script>
+</body>
+</html>

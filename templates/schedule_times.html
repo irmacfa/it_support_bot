@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>ساعت اطلاعیه شیفت | پنل مدیریت</title>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">ساعت اطلاعیه شیفت</div>
+    <div class="content">
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+            راس هر کدوم از این ساعت‌ها، پیام اطلاعیه شیفتِ روز بعد به‌صورت خودکار به گروه انفورماتیک ارسال می‌شه.
+        </p>
+
+        {% if message %}
+        <div class="msg success">{{ message }}</div>
+        {% endif %}
+
+        <div class="card">
+            <h2 style="margin-top:0;">افزودن ساعت جدید</h2>
+            <form class="add-form" method="post" action="/schedule-times/add">
+                <div>
+                    <label>ساعت (HH:MM)</label>
+                    <input type="text" name="time_value" placeholder="مثلاً 21:30" required pattern="^([01]\d|2[0-3]):([0-5]\d)$">
+                </div>
+                <button type="submit">➕ افزودن</button>
+            </form>
+
+            <h2>ساعت‌های فعلی</h2>
+            {% if times %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ساعت</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in times %}
+                    <tr>
+                        <td>{{ t }}</td>
+                        <td>
+                            <form method="post" action="/schedule-times/remove" style="margin:0;">
+                                <input type="hidden" name="time_value" value="{{ t }}">
+                                <button type="submit" class="danger">حذف</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هیچ ساعتی تنظیم نشده؛ اطلاعیه‌ای ارسال نمی‌شه.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

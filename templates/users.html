@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>کاربران عضو‌شده | پنل مدیریت</title>
+<style>
+.edit-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  z-index: 1000; justify-content: center; align-items: center;
+}
+.edit-overlay.active { display: flex; }
+.edit-modal {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  width: 90%; max-width: 420px;
+}
+.edit-modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.edit-modal-head h3 { font-size: 0.95rem; color: var(--text); margin: 0; }
+.edit-close {
+  background: none; border: none; color: var(--muted); font-size: 1.3rem;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.edit-close:hover { background: var(--card2); color: var(--text); }
+.edit-modal-body { padding: 16px 20px; }
+.edit-modal-foot {
+  padding: 12px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-start;
+}
+.edit-btn {
+  padding: 4px 10px; font-size: 0.78rem; border-radius: 6px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; font-family: inherit;
+}
+.edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+.badge-approved {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(34,197,94,.15); color: #22c55e;
+  border: 1px solid rgba(34,197,94,.3);
+}
+.badge-pending {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(234,179,8,.15); color: #eab308;
+  border: 1px solid rgba(234,179,8,.3);
+}
+.btn-approve {
+  padding: 4px 10px; font-size: 0.78rem; border-radius: 6px;
+  background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.4);
+  color: #22c55e; cursor: pointer; font-family: inherit;
+}
+.btn-approve:hover { background: rgba(34,197,94,.2); }
+.btn-reject {
+  padding: 4px 10px; font-size: 0.78rem; border-radius: 6px;
+  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.4);
+  color: #ef4444; cursor: pointer; font-family: inherit;
+}
+.btn-reject:hover { background: rgba(239,68,68,.2); }
+.section-title {
+  font-size: 0.95rem; font-weight: 600; color: var(--text);
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">کاربران عضو‌شده</div>
+    <div class="content">
+
+        {% if pending_users %}
+        <div class="section-title">⏳ در انتظار تایید ({{ pending_users | length }})</div>
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام واردشده</th>
+                        <th>نام بله</th>
+                        <th>یوزرنیم</th>
+                        <th>آیدی عددی</th>
+                        <th>تاریخ ثبت‌نام</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in pending_users %}
+                    <tr>
+                        <td>{{ u.full_name or "-" }}</td>
+                        <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
+                        <td>{{ ("@" ~ u.username) if u.username else "-" }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.registered_at or "-" }}</td>
+                        <td style="white-space:nowrap;">
+                            <button class="btn-approve" onclick="approveUser('{{ u.user_id }}', this)">✅ تایید</button>
+                            <button class="btn-reject" onclick="rejectUser('{{ u.user_id }}', this)">❌ رد</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="section-title">👥 همه کاربران</div>
+        <div class="card">
+            {% if users %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام واردشده</th>
+                        <th>نام بله</th>
+                        <th>یوزرنیم</th>
+                        <th>آیدی عددی</th>
+                        <th>تاریخ ثبت‌نام</th>
+                        <th>وضعیت</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td>{{ u.full_name or "-" }}</td>
+                        <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
+                        <td>{{ ("@" ~ u.username) if u.username else "-" }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.registered_at or "-" }}</td>
+                        <td>
+                            {% if u.get("approved", False) %}
+                            <span class="badge-approved">تایید شده</span>
+                            {% else %}
+                            <span class="badge-pending">در انتظار</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="edit-btn" onclick='openEdit({{ u | tojson }})'>ویرایش</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز هیچ کاربری ثبت‌نام نکرده.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- مدال ویرایش -->
+<div class="edit-overlay" id="editModal">
+  <div class="edit-modal">
+    <div class="edit-modal-head">
+      <h3>ویرایش کاربر</h3>
+      <button class="edit-close" onclick="closeEdit()">&times;</button>
+    </div>
+    <div class="edit-modal-body">
+      <input type="hidden" id="editUserId">
+      <label>نام واردشده</label>
+      <input type="text" id="editFullName" style="max-width:100%;">
+      <label>نام بله</label>
+      <input type="text" id="editFirstName" style="max-width:100%;">
+      <label>نام خانوادگی بله</label>
+      <input type="text" id="editLastName" style="max-width:100%;">
+    </div>
+    <div class="edit-modal-foot">
+      <button class="btn" onclick="saveEdit()" style="font-size:0.85rem;">ذخیره</button>
+      <button class="edit-close" onclick="closeEdit()" style="font-size:0.85rem;padding:8px 16px;">لغو</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openEdit(user) {
+  document.getElementById('editUserId').value = user.user_id;
+  document.getElementById('editFullName').value = user.full_name || '';
+  document.getElementById('editFirstName').value = user.first_name || '';
+  document.getElementById('editLastName').value = user.last_name || '';
+  document.getElementById('editModal').classList.add('active');
+}
+
+function closeEdit() {
+  document.getElementById('editModal').classList.remove('active');
+}
+
+async function saveEdit() {
+  const userId = document.getElementById('editUserId').value;
+  const fullName = document.getElementById('editFullName').value.trim();
+  const firstName = document.getElementById('editFirstName').value.trim();
+  const lastName = document.getElementById('editLastName').value.trim();
+
+  try {
+    const resp = await fetch(`/api/users/${userId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({full_name: fullName, first_name: firstName, last_name: lastName})
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      location.reload();
+    } else {
+      alert(result.error || 'خطا در ذخیره‌سازی.');
+    }
+  } catch (e) {
+    alert('خطا در ارتباط با سرور.');
+  }
+}
+
+async function approveUser(userId, btn) {
+  try {
+    const resp = await fetch(`/api/users/${userId}/approve`, { method: 'POST' });
+    const result = await resp.json();
+    if (result.ok) location.reload();
+    else alert(result.error || 'خطا');
+  } catch (e) { alert('خطا در ارتباط با سرور.'); }
+}
+
+async function rejectUser(userId, btn) {
+  try {
+    const resp = await fetch(`/api/users/${userId}/reject`, { method: 'POST' });
+    const result = await resp.json();
+    if (result.ok) location.reload();
+    else alert(result.error || 'خطا');
+  } catch (e) { alert('خطا در ارتباط با سرور.'); }
+}
+
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEdit(); });
+</script>
+</body>
+</html>

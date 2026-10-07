@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>احراز هویت گروه | پنل مدیریت</title>
+<style>
+.badge-top {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(59,130,246,.15); color: var(--accent);
+  border: 1px solid rgba(59,130,246,.3);
+}
+.badge-approved {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(34,197,94,.15); color: #22c55e;
+  border: 1px solid rgba(34,197,94,.3);
+}
+.badge-pending {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(234,179,8,.15); color: #eab308;
+  border: 1px solid rgba(234,179,8,.3);
+}
+.badge-unregistered {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(239,68,68,.15); color: #f87171;
+  border: 1px solid rgba(239,68,68,.3);
+}
+.section-title {
+  font-size: 0.95rem; font-weight: 600; color: var(--text);
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.edit-btn {
+  padding: 4px 10px; font-size: 0.78rem; border-radius: 6px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; font-family: inherit;
+}
+.edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+.edit-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  z-index: 1000; justify-content: center; align-items: center;
+}
+.edit-overlay.active { display: flex; }
+.edit-modal {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  width: 90%; max-width: 420px;
+}
+.edit-modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.edit-modal-head h3 { font-size: 0.95rem; color: var(--text); margin: 0; }
+.edit-close {
+  background: none; border: none; color: var(--muted); font-size: 1.3rem;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.edit-close:hover { background: var(--card2); color: var(--text); }
+.edit-modal-body { padding: 16px 20px; }
+.edit-modal-foot {
+  padding: 12px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-start;
+}
+</style>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">احراز هویت گروه</div>
+    <div class="content">
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+            ⚠️ API بله فقط تعداد کل اعضای گروه رو می‌ده، نه لیست اسم‌هاشون؛ پس هویت تک‌تک افراد فقط برای کسایی که حداقل یه‌بار توی گروه پیام فرستادن قابل شناسایی‌ه. «روح» یعنی اختلاف تعداد واقعی اعضا با تعداد احراز‌شده‌ها.
+        </p>
+
+        {% if message %}
+        <div class="msg {{ 'success' if '✅' in message else 'error' }}">{{ message }}</div>
+        {% endif %}
+
+        {% if groups_data %}
+        {% for g in groups_data %}
+        <div class="section-title">👥 {{ g.title }}</div>
+        <div class="card" style="margin-bottom: 24px;">
+            <p style="font-size:0.85rem; margin-bottom:16px;">
+                <span class="badge-top">🧮 کل اعضای واقعی گروه: {{ g.real_member_count if g.real_member_count is not none else "نامشخص" }}</span>
+                <span class="badge-approved" style="margin-right:8px;">✅ احراز شده: {{ g.counts.approved }}</span>
+                <span class="badge-pending" style="margin-right:8px;">⏳ در انتظار: {{ g.counts.pending }}</span>
+                <span class="badge-unregistered" style="margin-right:8px;">⛔ ثبت‌نام‌نکرده (شناسایی‌شده): {{ g.counts.unregistered }}</span>
+            </p>
+
+            {% if g.members %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>یوزرنیم</th>
+                        <th>آیدی عددی</th>
+                        <th>وضعیت</th>
+                        <th>آخرین پیام در گروه</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in g.members %}
+                    <tr>
+                        <td>{{ m.full_name or m.display_name or "-" }}</td>
+                        <td>{{ ("@" ~ m.username) if m.username else "-" }}</td>
+                        <td>{{ m.user_id }}</td>
+                        <td>{{ m.status_label }}</td>
+                        <td>{{ m.last_seen or "-" }}</td>
+                        <td>
+                            {% if m.status_key != "unregistered" %}
+                            <button class="edit-btn" onclick='openEdit({{ {"user_id": m.user_id, "full_name": m.full_name, "first_name": m.first_name, "last_name": m.last_name} | tojson }})'>ویرایش</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز کسی توی این گروه پیامی نفرستاده که شناسایی بشه.</div>
+            {% endif %}
+
+            <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+                <form method="post" action="/group-auth/send">
+                    <input type="hidden" name="chat_id" value="{{ g.chat_id }}">
+                    <button type="submit">📤 ارسال این گزارش به گروه</button>
+                </form>
+                <form method="post" action="/group-auth/remind">
+                    <input type="hidden" name="chat_id" value="{{ g.chat_id }}">
+                    <button type="submit" style="background: var(--yellow); color:#1e293b;">📢 یادآوری احراز هویت به گروه</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">هنوز هیچ گروهی شناسایی نشده.</div>
+        {% endif %}
+
+        {% if unseen_registered %}
+        <div class="section-title">👤 ثبت‌نام‌شده‌هایی که هنوز توی گروه دیده نشدن ({{ unseen_registered | length }})</div>
+        <div class="card">
+            <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+                این افراد قبلاً تو پیوی ربات ثبت‌نام/تایید شدن، ولی از وقتی ردیابی پیام‌های گروه فعال شده هنوز پیامی ازشون توی گروه دیده نشده (چون یا قبلاً پیام داده بودن و بعدش دیگه چیزی ننوشتن، یا اصلاً بی‌صدا عضو گروه‌ان).
+            </p>
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام واردشده</th>
+                        <th>نام بله</th>
+                        <th>آیدی عددی</th>
+                        <th>وضعیت</th>
+                        <th>تاریخ ثبت‌نام</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in unseen_registered %}
+                    <tr>
+                        <td>{{ u.full_name or "-" }}</td>
+                        <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.status_label }}</td>
+                        <td>{{ u.registered_at or "-" }}</td>
+                        <td>
+                            <button class="edit-btn" onclick='openEdit({{ {"user_id": u.user_id, "full_name": u.full_name, "first_name": u.first_name, "last_name": u.last_name} | tojson }})'>ویرایش</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- مدال ویرایش -->
+<div class="edit-overlay" id="editModal">
+  <div class="edit-modal">
+    <div class="edit-modal-head">
+      <h3>ویرایش کاربر</h3>
+      <button class="edit-close" onclick="closeEdit()">&times;</button>
+    </div>
+    <div class="edit-modal-body">
+      <input type="hidden" id="editUserId">
+      <label>نام واردشده</label>
+      <input type="text" id="editFullName" style="max-width:100%;">
+      <label>نام بله</label>
+      <input type="text" id="editFirstName" style="max-width:100%;">
+      <label>نام خانوادگی بله</label>
+      <input type="text" id="editLastName" style="max-width:100%;">
+    </div>
+    <div class="edit-modal-foot">
+      <button class="btn" onclick="saveEdit()" style="font-size:0.85rem;">ذخیره</button>
+      <button class="edit-close" onclick="closeEdit()" style="font-size:0.85rem;padding:8px 16px;">لغو</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openEdit(user) {
+  document.getElementById('editUserId').value = user.user_id;
+  document.getElementById('editFullName').value = user.full_name || '';
+  document.getElementById('editFirstName').value = user.first_name || '';
+  document.getElementById('editLastName').value = user.last_name || '';
+  document.getElementById('editModal').classList.add('active');
+}
+
+function closeEdit() {
+  document.getElementById('editModal').classList.remove('active');
+}
+
+async function saveEdit() {
+  const userId = document.getElementById('editUserId').value;
+  const fullName = document.getElementById('editFullName').value.trim();
+  const firstName = document.getElementById('editFirstName').value.trim();
+  const lastName = document.getElementById('editLastName').value.trim();
+
+  try {
+    const resp = await fetch(`/api/users/${userId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({full_name: fullName, first_name: firstName, last_name: lastName})
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      location.reload();
+    } else {
+      alert(result.error || 'خطا در ذخیره‌سازی.');
+    }
+  } catch (e) {
+    alert('خطا در ارتباط با سرور.');
+  }
+}
+
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEdit(); });
+</script>
+</body>
+</html>

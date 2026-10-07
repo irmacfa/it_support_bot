@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>آمار استفاده | پنل مدیریت</title>
+<style>
+.badge-top {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.78rem; background: rgba(59,130,246,.15); color: var(--accent);
+  border: 1px solid rgba(59,130,246,.3); margin-right: 6px;
+}
+.badge-count {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 0.76rem; background: var(--card2); color: var(--muted);
+  border: 1px solid var(--border); margin-left: 4px;
+}
+.section-title {
+  font-size: 0.95rem; font-weight: 600; color: var(--text);
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">آمار استفاده</div>
+    <div class="content">
+
+        {% if message %}
+        <div class="msg {{ 'success' if '✅' in message else 'error' }}">{{ message }}</div>
+        {% endif %}
+
+        <div class="section-title">📅 فعال‌ترین‌ها در یه بازه‌ی دلخواه</div>
+        <div class="card" style="margin-bottom: 24px;">
+            <form method="get" action="/usage" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px;">
+                <div>
+                    <label>از تاریخ (جلالی)</label>
+                    <input type="text" name="from_date" value="{{ from_date }}" placeholder="1405/06/01" style="max-width:160px; margin-bottom:0;">
+                </div>
+                <div>
+                    <label>تا تاریخ (جلالی)</label>
+                    <input type="text" name="to_date" value="{{ to_date }}" placeholder="1405/06/07" style="max-width:160px; margin-bottom:0;">
+                </div>
+                <button type="submit">🔍 اعمال بازه</button>
+                {% if from_date != default_from or to_date != default_to %}
+                <a href="/usage" style="font-size:0.82rem;">↺ بازگشت به هفته‌ی جاری (شنبه تا جمعه)</a>
+                {% endif %}
+            </form>
+            <p style="font-size:0.82rem; color:var(--muted); margin-bottom:16px;">
+                بازه‌ی فعلی: {{ from_date }} تا {{ to_date }}
+            </p>
+
+            {% if top_charge_requester %}
+            <p style="margin-bottom:16px;">
+                <span class="badge-top">🏆 پرتقاضاترین شارژ این بازه: {{ top_charge_requester.full_name or top_charge_requester.user_id }} ({{ top_charge_requester.actions.charge }} درخواست)</span>
+            </p>
+            {% endif %}
+            {% if top_reset_requester %}
+            <p style="margin-bottom:16px;">
+                <span class="badge-top">🔑 پرتقاضاترین ریست رمز این بازه: {{ top_reset_requester.full_name or top_reset_requester.user_id }} ({{ top_reset_requester.actions.reset }} درخواست)</span>
+            </p>
+            {% endif %}
+
+            {% if range_users %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>آیدی عددی</th>
+                        <th>تعداد کل</th>
+                        <th>ریز استفاده</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in range_users %}
+                    <tr>
+                        <td>{{ u.full_name or "-" }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.total }}</td>
+                        <td>
+                            {% if u.actions.get("charge") %}<span class="badge-count">شارژ: {{ u.actions.charge }}</span>{% endif %}
+                            {% if u.actions.get("info") %}<span class="badge-count">اطلاعات: {{ u.actions.info }}</span>{% endif %}
+                            {% if u.actions.get("shift") %}<span class="badge-count">شیفت: {{ u.actions.shift }}</span>{% endif %}
+                            {% if u.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ u.actions.reset }}</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">تو این بازه هیچ استفاده‌ای ثبت نشده.</div>
+            {% endif %}
+
+            <h2>🏪 پرتقاضاترین فروشگاه‌ها این بازه</h2>
+            {% if range_codes %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>کد فروشگاه</th>
+                        <th>محل نصب</th>
+                        <th>تعداد کل</th>
+                        <th>ریز درخواست</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in range_codes %}
+                    <tr>
+                        <td>{{ c.code }}</td>
+                        <td>{{ c.location or "-" }}</td>
+                        <td>{{ c.total }}</td>
+                        <td>
+                            {% if c.actions.get("charge") %}<span class="badge-count">شارژ: {{ c.actions.charge }}</span>{% endif %}
+                            {% if c.actions.get("info") %}<span class="badge-count">اطلاعات: {{ c.actions.info }}</span>{% endif %}
+                            {% if c.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ c.actions.reset }}</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">تو این بازه هیچ کد فروشگاهی درخواست نشده.</div>
+            {% endif %}
+        </div>
+
+        <div class="section-title">🏪 پرتقاضاترین فروشگاه‌ها (کل زمان)</div>
+        <div class="card" style="margin-bottom: 24px;">
+            {% if top_codes %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>کد فروشگاه</th>
+                        <th>محل نصب</th>
+                        <th>تعداد کل</th>
+                        <th>ریز درخواست</th>
+                        <th>آخرین درخواست</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in top_codes %}
+                    <tr>
+                        <td>{{ c.code }}</td>
+                        <td>{{ c.location or "-" }}</td>
+                        <td>{{ c.total }}</td>
+                        <td>
+                            {% if c.actions.get("charge") %}<span class="badge-count">شارژ: {{ c.actions.charge }}</span>{% endif %}
+                            {% if c.actions.get("info") %}<span class="badge-count">اطلاعات: {{ c.actions.info }}</span>{% endif %}
+                            {% if c.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ c.actions.reset }}</span>{% endif %}
+                        </td>
+                        <td>{{ c.last_requested_at or "-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز هیچ کد فروشگاهی درخواست نشده.</div>
+            {% endif %}
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            {% if groups %}
+            <form method="post" action="/usage/send">
+                <label>ارسال گزارش بالا به یه گروه</label>
+                <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:200px;">
+                        <select name="chat_id" required style="max-width:100%; margin-bottom:0;">
+                            {% for g in groups %}
+                            <option value="{{ g.chat_id }}">{{ g.title or g.chat_id }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit">📤 ارسال گزارش به گروه</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="empty">هنوز هیچ گروهی شناسایی نشده.</div>
+            {% endif %}
+        </div>
+
+        <div class="section-title">🔔 مقایسه مسئولین شارژ</div>
+        <div class="card" style="margin-bottom: 24px;">
+            {% if admins %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>آیدی عددی</th>
+                        <th>تعداد پاسخ داده‌شده</th>
+                        <th>شارژ دارد / انجام شد</th>
+                        <th>میانگین زمان پاسخ</th>
+                        <th>آخرین پاسخ</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in admins %}
+                    <tr>
+                        <td>{{ a.name or "-" }}</td>
+                        <td>{{ a.user_id }}</td>
+                        <td>{{ a.responded_count }}</td>
+                        <td>{{ a.noissue_count }} / {{ a.done_count }}</td>
+                        <td>{{ a.avg_response }}</td>
+                        <td>{{ a.last_response_at or "هنوز پاسخی نداده" }}</td>
+                        <td>
+                            {% if a.user_id == top_admin_id %}
+                            <span class="badge-top">🏆 فعال‌ترین</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز هیچ مسئول شارژی توی پنل ثبت نشده.</div>
+            {% endif %}
+        </div>
+
+        <div class="section-title">🔑 مقایسه مسئولین ریست رمز</div>
+        <div class="card" style="margin-bottom: 24px;">
+            {% if reset_admins %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>آیدی عددی</th>
+                        <th>تعداد پاسخ داده‌شده</th>
+                        <th>ریست شد / اشتباه بود</th>
+                        <th>میانگین زمان پاسخ</th>
+                        <th>آخرین پاسخ</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in reset_admins %}
+                    <tr>
+                        <td>{{ a.name or "-" }}</td>
+                        <td>{{ a.user_id }}</td>
+                        <td>{{ a.responded_count }}</td>
+                        <td>{{ a.done_count }} / {{ a.wrong_count }}</td>
+                        <td>{{ a.avg_response }}</td>
+                        <td>{{ a.last_response_at or "هنوز پاسخی نداده" }}</td>
+                        <td>
+                            {% if a.user_id == top_reset_admin_id %}
+                            <span class="badge-top">🏆 فعال‌ترین</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز هیچ مسئول ریست رمزی توی پنل ثبت نشده.</div>
+            {% endif %}
+        </div>
+
+        <div class="section-title">✅ کاربرانی که از قابلیت‌های ربات استفاده کردن ({{ active_users | length }})</div>
+        <div class="card" style="margin-bottom: 24px;">
+            {% if active_users %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>آیدی عددی</th>
+                        <th>تعداد کل استفاده</th>
+                        <th>ریز استفاده</th>
+                        <th>آخرین استفاده</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in active_users %}
+                    <tr>
+                        <td>{{ u.full_name or "-" }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.total }}</td>
+                        <td>
+                            {% if u.actions.get("charge") %}<span class="badge-count">شارژ: {{ u.actions.charge }}</span>{% endif %}
+                            {% if u.actions.get("info") %}<span class="badge-count">اطلاعات: {{ u.actions.info }}</span>{% endif %}
+                            {% if u.actions.get("shift") %}<span class="badge-count">شیفت: {{ u.actions.shift }}</span>{% endif %}
+                            {% if u.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ u.actions.reset }}</span>{% endif %}
+                        </td>
+                        <td>{{ u.last_action_at or "-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز هیچ کاربری از قابلیت‌ها استفاده نکرده.</div>
+            {% endif %}
+        </div>
+
+        <div class="section-title">⛔ کاربرانی که هنوز هیچ استفاده‌ای نکردن ({{ inactive_users | length }})</div>
+        <div class="card">
+            {% if inactive_users %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>نام بله</th>
+                        <th>یوزرنیم</th>
+                        <th>آیدی عددی</th>
+                        <th>تاریخ ثبت‌نام</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in inactive_users %}
+                    <tr>
+                        <td>{{ u.full_name or "-" }}</td>
+                        <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
+                        <td>{{ ("@" ~ u.username) if u.username else "-" }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.registered_at or "-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">همه کاربرها حداقل یه‌بار از ربات استفاده کردن. 🎉</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

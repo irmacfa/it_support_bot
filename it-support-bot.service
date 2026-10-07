@@ -1,0 +1,15 @@
+[Unit]
+Description=IT Support Bot - Bale Messenger Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ali
+WorkingDirectory=/home/ali/it_support_bot
+ExecStart=/home/ali/it_support_bot/venv/bin/python3 -m app.bale_bot
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

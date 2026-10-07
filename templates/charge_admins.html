@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>مسئولین شارژ | پنل مدیریت</title>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">مسئولین شارژ</div>
+    <div class="content">
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+            این افراد وقتی توی گروه یه نفر کد فروشگاه رو بزنه، پیوی پیام و دکمه‌ی «شارژ داره / شارژ انجام شد» می‌گیرن.
+        </p>
+
+        {% if message %}
+        <div class="msg success">{{ message }}</div>
+        {% endif %}
+
+        <div class="card">
+            <h2 style="margin-top:0;">افزودن مسئول جدید</h2>
+            <form class="add-form" method="post" action="/charge-admins/add">
+                <div>
+                    <label>آیدی عددی بله</label>
+                    <input type="text" name="user_id" placeholder="مثلاً 839577721" required>
+                </div>
+                <div>
+                    <label>نام (اختیاری)</label>
+                    <input type="text" name="name" placeholder="اگه ثبت‌نام کرده خودکار پر میشه">
+                </div>
+                <button type="submit">➕ افزودن</button>
+            </form>
+
+            <h2>لیست فعلی</h2>
+            {% if admins %}
+            <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام</th>
+                        <th>آیدی عددی</th>
+                        <th>تاریخ افزودن</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in admins %}
+                    <tr>
+                        <td>{{ a.name or "-" }}</td>
+                        <td>{{ a.user_id }}</td>
+                        <td>{{ a.added_at or "-" }}</td>
+                        <td>
+                            <form method="post" action="/charge-admins/remove" style="margin:0;">
+                                <input type="hidden" name="user_id" value="{{ a.user_id }}">
+                                <button type="submit" class="danger">حذف</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty">هنوز هیچ مسئول شارژی اضافه نشده.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>ارسال پیام به گروه | پنل مدیریت</title>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">ارسال پیام به گروه</div>
+    <div class="content">
+        <div class="card">
+            {% if message %}
+            <div class="msg {{ 'success' if '✅' in message else 'error' }}">{{ message }}</div>
+            {% endif %}
+
+            {% if groups %}
+            <form method="post" action="/broadcast">
+                <label>گروه مقصد</label>
+                <select name="chat_id" required style="max-width:100%;">
+                    {% for g in groups %}
+                    <option value="{{ g.chat_id }}">{{ g.title or g.chat_id }}</option>
+                    {% endfor %}
+                </select>
+
+                <label>متن پیام</label>
+                <textarea name="text" placeholder="متن پیام رو اینجا بنویس..." required></textarea>
+
+                <button type="submit">📤 ارسال</button>
+            </form>
+            {% else %}
+            <div class="empty">هنوز هیچ گروهی شناسایی نشده. تا وقتی ربات توی یه گروه پیامی نبینه، اون گروه اینجا نشون داده نمی‌شه.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

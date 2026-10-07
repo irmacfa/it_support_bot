@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>ویرایش شیفت | پنل مدیریت</title>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">ویرایش شیفت</div>
+    <div class="content">
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+            روزهای برنامه شیفتِ بارگذاری‌شده (از فایل PDF استخراج شده). با زدن «ویرایش» می‌تونی کارشناس‌های یه روز خاص رو مستقیم عوض کنی، بدون آپلود دوباره فایل.
+        </p>
+
+        {% if days %}
+        <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>تاریخ</th>
+                    <th>روز</th>
+                    <th>دسک اول</th>
+                    <th>دسک دوم</th>
+                    <th>شیفت شب اول</th>
+                    <th>شیفت شب دوم</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in days %}
+                <tr>
+                    <td>{{ d.date }}</td>
+                    <td>{{ d.day_name }}</td>
+                    <td>{{ d.desk1 or '-' }}</td>
+                    <td>{{ d.desk2 or '-' }}</td>
+                    <td>{{ d.night_primary or '-' }}</td>
+                    <td>{{ d.night_secondary or '-' }}</td>
+                    <td><a href="/schedule/edit/{{ d.date }}">✏️ ویرایش</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty">هنوز هیچ فایل شیفتی آپلود نشده.</div>
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>

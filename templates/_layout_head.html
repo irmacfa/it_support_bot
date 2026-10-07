@@ -1,0 +1,343 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+@font-face {
+  font-family: 'Vazir';
+  src: url('https://cdn.jsdelivr.net/npm/vazir-font@30.1.0/dist/Vazir-Regular.woff2') format('woff2');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Vazir';
+  src: url('https://cdn.jsdelivr.net/npm/vazir-font@30.1.0/dist/Vazir-Bold.woff2') format('woff2');
+  font-weight: 700;
+}
+html { font-size: clamp(14px, 1.1vw, 20px); }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root {
+  --bg: #0f172a;
+  --sidebar: #1e293b;
+  --card: #1e293b;
+  --card2: #263347;
+  --border: #334155;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #3b82f6;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+}
+body {
+  font-family: 'Vazir', Tahoma, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+  direction: rtl;
+}
+
+/* ===== سایدبار ===== */
+.sidebar {
+  width: 216px;
+  background: var(--sidebar);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 100;
+}
+.sidebar-logo { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+.sidebar-logo h1 { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
+.sidebar-logo p { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+.sidebar-stats { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.stat-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--muted); }
+.stat-icon { font-size: 0.9rem; width: 1.15rem; text-align: center; flex-shrink: 0; }
+.stat-label { flex: 1; }
+.stat-value { font-weight: 700; color: var(--text); }
+.stats-send-btn {
+  margin-top: 2px; width: 100%; padding: 0.4rem; background: transparent;
+  border: 1px solid var(--border); color: var(--accent); border-radius: 8px;
+  cursor: pointer; font-family: inherit; font-size: 0.75rem;
+}
+.stats-send-btn:hover { background: rgba(59,130,246,.15); }
+.stats-send-btn:disabled { opacity: 0.6; cursor: default; }
+.nav-list { padding: 6px 0; flex: 1; }
+.nav-section {
+  padding: 10px 1rem 4px; font-size: 0.65rem; font-weight: 700;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+  opacity: 0.7;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0.55rem 1rem; cursor: pointer; font-size: 0.85rem;
+  color: var(--muted); text-decoration: none; transition: all .15s;
+  border-right: 3px solid transparent;
+  white-space: nowrap; overflow: hidden;
+}
+.nav-item:hover { background: var(--card2); color: var(--text); }
+.nav-item.active { background: rgba(59,130,246,.15); color: var(--accent); border-right-color: var(--accent); }
+.nav-icon { font-size: 1.15rem; width: 1.6rem; text-align: center; line-height: 1; flex-shrink:0; }
+.sidebar-foot { border-top: 1px solid var(--border); padding: 8px; }
+.logout-btn {
+  width: 100%; padding: 0.5rem; background: transparent; border: 1px solid var(--border);
+  color: var(--muted); border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.78rem;
+}
+.logout-btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* ===== محتوا ===== */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--border);
+  background: var(--sidebar); font-size: 1.05rem; font-weight: 700;
+}
+.content { padding: 1.5rem; width: 100%; }
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 24px;
+}
+h2 { font-size: 0.95rem; margin: 22px 0 12px; color: var(--text); }
+label { display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--muted); }
+input[type="password"], input[type="file"], input[type="text"], select, textarea {
+  width: 100%; padding: 10px; margin-bottom: 16px;
+  border: 1px solid var(--border); border-radius: 8px;
+  box-sizing: border-box; font-family: inherit; background: var(--card2); color: var(--text);
+  max-width: 360px;
+}
+textarea { max-width: 100%; min-height: 110px; resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+button, .btn {
+  padding: 10px 22px; background: var(--accent); color: #fff; border: none;
+  border-radius: 8px; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+}
+button:hover, .btn:hover { background: #2563eb; }
+button.danger { background: var(--red); padding: 6px 14px; font-size: 0.8rem; }
+button.danger:hover { background: #dc2626; }
+.msg { padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.85rem; }
+.msg.success { background: rgba(16,185,129,.15); color: #34d399; border: 1px solid rgba(16,185,129,.3); }
+.msg.error { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.3); }
+.status { font-size: 0.82rem; color: var(--muted); margin-top: 16px; }
+.empty { text-align: center; color: var(--muted); padding: 24px 0; }
+.add-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.add-form input { margin-bottom: 0; }
+
+/* ===== جدول ===== */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 8px; }
+th, td { text-align: right; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; background: var(--card2); }
+
+/* اسکرول افقی بالای جدول: وقتی جدول پهنه، اسکرول پایین خیلی دوره.
+   یه نوار هم بالای جدول می‌ذاریم که با اسکرول پایین هم‌حرکته. */
+.table-wrap-top {
+  overflow-x: scroll;
+  overflow-y: hidden;
+  height: 14px;
+  margin-bottom: -1px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.table-wrap-top > .table-wrap-top-inner { height: 1px; }
+.table-wrap-top::-webkit-scrollbar { height: 12px; }
+.table-wrap-top::-webkit-scrollbar-track { background: var(--card2); }
+.table-wrap-top::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 6px;
+  opacity: .7;
+}
+.table-wrap-top::-webkit-scrollbar-thumb:hover { opacity: 1; }
+.table-wrap-top-hidden { display: none; }
+
+/* ===== گرید دو ستونه برای کارت‌ها ===== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+.cards-grid.grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.cards-grid > h2 {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.cards-grid > .card {
+  margin: 0;
+}
+
+/* ===== ریسپانسیو ===== */
+@media (max-width: 1100px) {
+  .content { padding: 1.2rem; }
+}
+
+@media (max-width: 900px) {
+  .cards-grid, .cards-grid.grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-left: none;
+    border-bottom: 1px solid var(--border);
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .sidebar-logo { display: none; }
+  .nav-section { display: none; }
+  .nav-list {
+    display: flex;
+    padding: 0;
+    gap: 0;
+    overflow-x: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-item {
+    white-space: nowrap;
+    padding: 0.7rem 0.8rem;
+    font-size: 0.82rem;
+    border-right: none;
+    border-bottom: 3px solid transparent;
+    flex-shrink: 0;
+  }
+  .nav-item.active { border-bottom-color: var(--accent); border-right-color: transparent; }
+  .nav-icon { width: auto; font-size: 1.1rem; }
+  .sidebar-foot { border-top: none; border-right: 1px solid var(--border); padding: 6px 10px; }
+  .logout-btn { padding: 0.5rem 0.8rem; font-size: 0.78rem; white-space: nowrap; }
+
+  .content { padding: 1rem; }
+  .topbar { padding: 0.7rem 1rem; font-size: 0.95rem; }
+
+  table { font-size: 0.78rem; }
+  th, td { padding: 8px 6px; }
+
+  input[type="password"], input[type="file"], input[type="text"], select, textarea {
+    max-width: 100%;
+  }
+
+  .add-form { flex-direction: column; align-items: stretch; }
+  .add-form > div { width: 100%; }
+  .add-form input { max-width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .content { padding: 0.7rem; }
+  .card { padding: 16px; }
+  .topbar { padding: 0.6rem 0.8rem; font-size: 0.88rem; }
+  .nav-item { padding: 0.6rem; font-size: 0.78rem; }
+}
+</style>
+<script>
+/* ===== اسکرول افقی جدول‌ها =====
+   برای جدول‌های پهن (مثل فهرست کامل فروشگاه‌ها) دو چیز اضافه می‌کنیم:
+   ۱) یه نوار اسکرول افقی بالای جدول که با نوار پایین هم‌حرکته.
+   ۲) اسکرول افقی با موس: Shift + چرخ موس (و خود چرخ افقی ترک‌پد).
+*/
+(function () {
+  'use strict';
+
+  var syncing = false;
+
+  function measure(wrap, top, inner) {
+    var overflow = wrap.scrollWidth - wrap.clientWidth;
+    if (overflow <= 2) {
+      top.classList.add('table-wrap-top-hidden');
+      return;
+    }
+    top.classList.remove('table-wrap-top-hidden');
+    inner.style.width = wrap.scrollWidth + 'px';
+  }
+
+  function enhance(wrap) {
+    if (wrap.dataset.hscrollReady === '1') return;
+    wrap.dataset.hscrollReady = '1';
+
+    var top = document.createElement('div');
+    top.className = 'table-wrap-top table-wrap-top-hidden';
+    top.setAttribute('aria-hidden', 'true');
+    var inner = document.createElement('div');
+    inner.className = 'table-wrap-top-inner';
+    top.appendChild(inner);
+    wrap.parentNode.insertBefore(top, wrap);
+
+    function remeasure() { measure(wrap, top, inner); }
+    remeasure();
+
+    // هم‌حرکت کردن دو نوار اسکرول (مقدار scrollLength مستقیم کپی می‌شه تا
+    // با قرارداد RTL مرورگرها هماهنگ بمونه)
+    wrap.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      top.scrollLeft = wrap.scrollLeft;
+      syncing = false;
+    }, { passive: true });
+
+    top.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      wrap.scrollLeft = top.scrollLeft;
+      syncing = false;
+    }, { passive: true });
+
+    // چرخ موس: با Shift یا چرخ افقی، جدول رو افقی بکش
+    wrap.addEventListener('wheel', function (e) {
+      var canScroll = wrap.scrollWidth - wrap.clientWidth > 2;
+      if (!canScroll) return;
+      var horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (!horizontal && !e.shiftKey) return;
+      var delta = horizontal ? e.deltaX : e.deltaY;
+      if (!delta) return;
+      e.preventDefault();
+      wrap.scrollBy({ left: delta, behavior: 'auto' });
+    }, { passive: false });
+
+    // درگ کردن با موس هم مثل اسکرول افقی کار کنه
+    var dragging = false, dragX = 0;
+    wrap.addEventListener('mousedown', function (e) {
+      if (e.target.closest('th') || e.target.closest('input, button, select, a, label')) return;
+      if (wrap.scrollWidth - wrap.clientWidth <= 2) return;
+      dragging = true;
+      dragX = e.clientX + wrap.scrollLeft;
+      wrap.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      wrap.scrollLeft = dragX - e.clientX;
+    });
+    window.addEventListener('mouseup', function () {
+      if (!dragging) return;
+      dragging = false;
+      wrap.style.cursor = '';
+    });
+
+    window.addEventListener('resize', remeasure);
+    if (window.ResizeObserver) {
+      var table = wrap.querySelector('table');
+      if (table) new ResizeObserver(remeasure).observe(table);
+    }
+    // فونت‌ها و تصاویر دیرتر لود می‌شن؛ بعد از کامل‌شدن صفحه دوباره اندازه بگیر
+    window.addEventListener('load', remeasure);
+  }
+
+  function init() {
+    document.querySelectorAll('.table-wrap').forEach(enhance);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>

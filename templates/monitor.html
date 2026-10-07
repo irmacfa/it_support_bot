@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>مانیتورینگ | پنل مدیریت</title>
+<style>
+.content { padding: 1rem; }
+.card { padding: 14px 16px; }
+.topbar { font-size: 0.95rem; }
+
+/* ===== هدر پایش ===== */
+.mon-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 9px 14px; margin-bottom: 12px;
+}
+.mon-head h2 { font-size: .92rem; margin: 0; display: flex; align-items: center; gap: 7px; }
+.mon-head .sub { font-size: .72rem; color: var(--muted); }
+.mon-head .sp { flex: 1; }
+.pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--green); display: inline-block; }
+.pulse.on { animation: pl 2s ease-in-out infinite; }
+.pulse.pause { background: var(--muted); }
+@keyframes pl { 0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(16,185,129,.5); } 50% { opacity:.35; box-shadow: 0 0 0 7px rgba(16,185,129,0); } }
+
+/* ===== KPI (فشرده) ===== */
+.hero { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; margin-bottom: 12px; }
+@media (max-width: 1100px) { .hero { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 620px) { .hero { grid-template-columns: repeat(2, 1fr); } }
+.hcard {
+  background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 13px; position: relative; overflow: hidden;
+}
+.hcard::after { content:""; position:absolute; inset-block:0; inset-inline-start:0; width:3px; background: var(--accent); }
+.hcard.c-green::after { background: var(--green); } .hcard.c-green .n { color: var(--green); }
+.hcard.c-red::after { background: var(--red); } .hcard.c-red .n { color: var(--red); }
+.hcard.c-yellow::after { background: var(--yellow); } .hcard.c-yellow .n { color: var(--yellow); }
+.hcard.c-grey::after { background: var(--muted); }
+.hcard .n { font-size: 1.35rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.hcard .l { font-size: .71rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hcard .s { font-size: .63rem; color: var(--muted); margin-top: 2px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; }
+
+/* ===== گرید ===== */
+.grid2 { display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+.sec-title { font-size: .83rem; margin: 0 0 10px; display: flex; align-items: center; gap: 7px; }
+.sec-title small { font-weight: 400; color: var(--muted); font-size: .68rem; }
+
+/* ===== نمودار ===== */
+.chart { display: flex; align-items: flex-end; gap: 5px; height: 118px; padding-top: 6px; }
+.col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.col .bars { display: flex; align-items: flex-end; gap: 2px; width: 100%; height: 92px; justify-content: center; }
+.col .b { width: 17px; max-width: 30%; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .4s; }
+.b1 { background: var(--accent); } .b2 { background: var(--green); } .b3 { background: var(--yellow); } .b4 { background: var(--red); }
+.col .tot { font-size: .72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.col .day { font-size: .62rem; color: var(--muted); }
+.col .dt { display: none; }
+.col.today .tot { color: var(--green); }
+.legend { display: flex; gap: 13px; font-size: .69rem; color: var(--muted); margin-top: 9px; }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-inline-end: 4px; }
+
+/* ===== هشدارها ===== */
+.alert { border-radius: 9px; padding: 8px 11px; font-size: .78rem; line-height: 1.75; margin-bottom: 7px;
+         border: 1px solid; display: block; text-decoration: none; color: var(--text); }
+.alert:hover { transform: translateX(-3px); }
+.alert.crit { border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.09); }
+.alert.warn { border-color: rgba(245,158,11,.45); background: rgba(245,158,11,.09); }
+.alert.info { border-color: rgba(59,130,246,.4); background: rgba(59,130,246,.09); }
+.alert b { font-size: .79rem; display: inline-block; margin-bottom: 2px; }
+.alert.crit b { color: var(--red); } .alert.warn b { color: var(--yellow); } .alert.info b { color: var(--accent); }
+.alert span { display: block; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+
+/* ===== پوشش ===== */
+.ring-wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.ring { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+.ring > div { width: 72px; height: 72px; border-radius: 50%; background: var(--card2); display: grid; place-items: center; text-align: center; }
+.ring b { font-size: 1.15rem; display: block; font-variant-numeric: tabular-nums; }
+.ring small { font-size: .6rem; color: var(--muted); }
+.rbar-row { display: grid; grid-template-columns: 128px 1fr 78px; gap: 8px; align-items: center; margin-bottom: 4px; font-size: .74rem; }
+.rbar { height: 16px; background: var(--card2); border-radius: 5px; overflow: hidden; position: relative; }
+.rbar > i { position: absolute; inset-block: 0; inset-inline-end: 0; border-radius: 5px; background: var(--red); }
+.rbar .rest { position: absolute; inset-block: 0; inset-inline-end: 0; background: rgba(16,185,129,.22); border-radius: 5px; }
+.sum-line { font-size: .74rem; display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-bottom:1px dashed var(--border); }
+.sum-line:last-child { border-bottom:none; }
+.sum-line b { font-variant-numeric: tabular-nums; }
+
+/* ===== جدول زنده / چگالی ===== */
+.mtable { width: 100%; border-collapse: collapse; font-size: .76rem; }
+.mtable th, .mtable td { padding: 5px 7px; border-bottom: 1px solid var(--border); text-align: right; }
+.mtable th { color: var(--muted); font-weight: 600; font-size: .69rem; cursor: pointer; user-select: none; white-space: nowrap; }
+.mtable th:hover { color: var(--accent); }
+.mtable th.sorted { color: var(--accent); }
+.mtable tbody tr:hover { background: rgba(59,130,246,.05); }
+.mtable td { white-space: nowrap; }
+.mtable td.wrap { white-space: normal; }
+.dot { margin-inline-end: 5px; }
+.st-online { color: var(--green); font-weight: 700; }
+.st-recent { color: var(--yellow); font-weight: 600; }
+.st-idle, .st-unseen { color: var(--muted); }
+.mbar { position: relative; height: 5px; min-width: 44px; background: var(--card2); border-radius: 5px; overflow: hidden; }
+.mbar > i { position: absolute; inset-block: 0; inset-inline-start: 0; background: var(--accent); border-radius: 5px; }
+.num { font-variant-numeric: tabular-nums; }
+.qbox { display:flex; gap:7px; align-items:center; flex-wrap:wrap; margin-bottom: 8px; }
+.qbox input { margin-bottom: 0; max-width: 200px; padding: 5px 9px; }
+.chip { padding: 3px 10px; border-radius: 20px; font-size: .71rem; background: var(--card2);
+        border: 1px solid var(--border); color: var(--muted); cursor: pointer; transition: .15s; }
+.chip:hover { color: var(--text); border-color: var(--accent); }
+.chip.on { background: rgba(59,130,246,.18); color: var(--accent); border-color: var(--accent); }
+
+/* ===== منفک‌ها (جمع‌شونده) ===== */
+.sep-card { border: 1px solid var(--yellow); background: rgba(245,158,11,.07); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.sep-card summary { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: .84rem; color: var(--yellow); list-style: none; }
+.sep-card summary::-webkit-details-marker { display: none; }
+.sep-card summary::before { content: "▸"; transition: transform .15s; font-size: .8rem; }
+.sep-card[open] summary::before { transform: rotate(90deg); }
+.sep-card .why { font-size: .74rem; line-height: 1.9; color: var(--muted); margin: 8px 0 0; }
+.sep-card .why b { color: var(--yellow); }
+.sep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 5px; max-height: 168px; overflow-y: auto; margin-top: 8px; padding-inline-end: 3px; }
+.sep-i { background: var(--card2); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: .73rem; }
+.sep-i b { color: var(--yellow); direction: ltr; display: inline-block; font-weight: 700; }
+.sep-i span { color: var(--muted); font-size: .66rem; display: block; }
+.badgey { font-size: .68rem; padding: 2px 8px; border-radius: 20px; background: rgba(245,158,11,.15); color: var(--yellow); border: 1px solid rgba(245,158,11,.4); }
+
+/* ===== داغ‌ترین‌ها / مسئولین / خلاصه ===== */
+.rank { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: .76rem; }
+.rank:last-child { border-bottom: none; }
+.rank .idx { width: 19px; height: 19px; border-radius: 50%; background: var(--card2); display: grid; place-items: center;
+             font-size: .62rem; color: var(--muted); flex-shrink: 0; }
+.rank .grow { flex: 1; min-width: 0; }
+.rank .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+.perf { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: .76rem; }
+.perf .nm { min-width: 108px; font-size: .72rem; }
+.perf .track { flex: 1; height: 6px; background: var(--card2); border-radius: 6px; overflow: hidden; }
+.perf .track > i { display: block; height: 100%; background: var(--green); border-radius: 6px; }
+.perf .val { min-width: 34px; text-align: left; font-variant-numeric: tabular-nums; font-weight: 700; }
+.perf-sub { font-size: .63rem; color: var(--muted); margin: -2px 0 4px; }
+.empty { color: var(--muted); font-size: .75rem; padding: 10px 0; }
+.mt { margin-bottom: 12px; }
+
+/* کلیک روی هشدارها: جابه‌جایی + هایلایت + بازکردن منفک */
+@keyframes fm { 0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } 30% { box-shadow: 0 0 0 4px rgba(59,130,246,.35); } }
+.flash { animation: fm 1.3s ease-out 2; }
+
+/* ===== اعداد کلیک‌پذیر ===== */
+.drill { cursor: pointer; border-radius: 6px; transition: background .15s, color .15s; padding: 0 3px; margin: 0 -3px; }
+.drill:hover { background: rgba(59,130,246,.12); color: var(--accent); }
+.hcard .drill { text-decoration: underline dotted rgba(148,163,184,.45); text-underline-offset: 3px; }
+
+/* ===== مودال لیست ===== */
+.dl-overlay { position: fixed; inset: 0; background: rgba(2,6,23,.66); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 16px; }
+.dl-overlay[hidden] { display: none; }
+.dl-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: min(640px, 100%); max-height: min(78vh, 640px); display: flex; flex-direction: column; box-shadow: 0 18px 60px rgba(0,0,0,.5); }
+.dl-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.dl-head b { font-size: .9rem; flex: 1; min-width: 0; }
+.dl-count { font-size: .72rem; color: var(--muted); background: var(--card2); border: 1px solid var(--border); padding: 2px 10px; border-radius: 20px; white-space: nowrap; }
+.dl-close { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: .85rem; cursor: pointer; }
+.dl-close:hover { color: var(--red); border-color: var(--red); }
+.dl-body { overflow-y: auto; padding: 8px 10px; flex: 1; }
+.dl-item { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-bottom: 1px dashed var(--border); font-size: .78rem; }
+.dl-item:last-child { border-bottom: none; }
+.dl-code { font-weight: 700; direction: ltr; display: inline-block; font-variant-numeric: tabular-nums; min-width: 58px; }
+.dl-item .grow { flex: 1; min-width: 0; }
+.dl-item .muted, .dl-item .sub { color: var(--muted); font-size: .68rem; }
+.dl-subtitle { font-size: .74rem; color: var(--muted); padding: 9px 8px 2px; font-weight: 700; }
+.dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 6px; padding: 6px 8px; }
+.dl-tile { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: .74rem; }
+.dl-empty { color: var(--muted); text-align: center; padding: 26px 0; font-size: .8rem; }
+
+/* ===== خلاصه دیتا (تیل‌های کلیک‌پذیر) ===== */
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .sum-grid { grid-template-columns: repeat(2, 1fr); } }
+.sum-tile { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; position: relative; overflow: hidden; min-height: 62px; }
+.sum-tile::after { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: var(--accent); opacity: .55; }
+.sum-tile.st-green::after { background: var(--green); } .sum-tile.st-red::after { background: var(--red); } .sum-tile.st-yellow::after { background: var(--yellow); }
+.sum-tile .l { font-size: .7rem; color: var(--muted); }
+.sum-tile .v { font-size: 1.25rem; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.sum-tile .sub { font-size: .6rem; color: var(--muted); opacity: .85; }
+
+/* ===== داغ‌ترین‌ها: تگ ریز درخواست ===== */
+.hot-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.hot-tags span { font-size: .6rem; padding: 1px 7px; border-radius: 20px; background: var(--card2); border: 1px solid var(--border); color: var(--muted); }
+
+/* ===== ریسپانسیو اضافه ===== */
+@media (max-width: 700px) {
+  .rbar-row { grid-template-columns: 1fr; gap: 2px; }
+  .rbar-row > span:first-child { font-weight: 600; }
+  .perf .nm { min-width: 84px; font-size: .68rem; }
+  .mon-head .sub { display: block; width: 100%; }
+}
+@media (max-width: 560px) {
+  .hero { gap: 6px; }
+  .hcard { padding: 8px 10px; }
+  .hcard .n { font-size: 1.1rem; }
+  .legend { flex-wrap: wrap; gap: 8px; }
+  .chart .col .b { width: 11px; }
+  .dl-modal { max-height: 86vh; }
+  .col .tot { font-size: .66rem; }
+}
+</style>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">🩺 مانیتورینگ</div>
+    <div class="content">
+
+        {% set m = monitor %}
+        {% set st = m.stores %}
+
+        <!-- هدر پایش -->
+        <div class="mon-head">
+            <h2><span class="pulse on" id="pulse"></span> پایش زنده</h2>
+            <span class="sub">آخرین به‌روزرسانی: <span id="stamp">{{ m.generated_jalali }}</span></span>
+            <span class="sub" id="nextIn"></span>
+            <span class="sp"></span>
+            <button type="button" class="btn btn-sm" onclick="refresh(true)">🔄</button>
+            <button type="button" class="btn btn-sm" id="autoBtn" onclick="toggleAuto()">⏸ خودکار</button>
+        </div>
+
+        <!-- KPI -->
+        <div class="hero">
+            <div class="hcard c-green" title="زیر ۱۵ دقیقه پیش پیام دادن">
+                <div class="n drill" id="hOnline" data-dl="users:online">{{ m.states.online }}</div>
+                <div class="l">🟢 آنلاین</div>
+                <div class="s">+{{ m.states.recent }} زیر ۶ ساعت</div>
+            </div>
+            <div class="hcard" title="امروز از ربات استفاده کردن">
+                <div class="n drill" id="hToday" data-dl="users:active_today">{{ m.active_today }}</div>
+                <div class="l">📊 فعال امروز</div>
+                <div class="s">{{ m.today_total }} استفاده</div>
+            </div>
+            <div class="hcard c-grey">
+                <div class="n drill" id="hTotal" data-dl="users:all">{{ m.total_users }}</div>
+                <div class="l">👥 کل بچه‌ها</div>
+                <div class="s">{{ m.states.idle }} آفلاین · {{ m.states.unseen }} بدون حضور</div>
+            </div>
+            <div class="hcard c-red" title="فروشگاه فعال بدون کارشناس">
+                <div class="n drill" id="hNo" data-dl="stores:unassigned">{{ st.effective_unassigned }}</div>
+                <div class="l">🚫 بدون کارشناس</div>
+                <div class="s">{{ st.effective_pct }}٪ از {{ st.total }}</div>
+            </div>
+            <div class="hcard c-yellow" title="فروشگاه‌های کارشناسِ منفک">
+                <div class="n drill" id="hSep" data-dl="stores:separated">{{ st.separated_count }}</div>
+                <div class="l">🧍 منفک</div>
+                <div class="s">{% for g in st.separated_groups %}{{ g.expert }}{% if not loop.last %}، {% endif %}{% endfor %}</div>
+            </div>
+            <div class="hcard">
+                <div class="n drill" id="hWeek" data-dl="users:week">{{ m.week_total }}</div>
+                <div class="l">📈 این هفته</div>
+                <div class="s">{{ m.week_people }} نفر · قله {{ m.week_peak.label if m.week_peak }}</div>
+            </div>
+        </div>
+
+        <!-- هشدارها + نمودار -->
+        <div class="grid2 mt">
+            <div class="card">
+                <h3 class="sec-title">🚨 هشدارها</h3>
+                <div id="alerts">
+                {% for a in m.alerts %}
+                    <a class="alert {{ a.level }}" href="{{ a.link }}">
+                        <b>{{ a.icon }} {{ a.title }}</b>
+                        <span>{{ a.body }}</span>
+                    </a>
+                {% else %}
+                    <div class="alert info"><b>✅ همه‌چیز مرتبه</b><span>هشداری ثبت نشده.</span></div>
+                {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="sec-title">📈 فعالیت ۷ روز اخیر
+                    <small>امروز {{ m.today_total }} · هفته {{ m.week_total }}</small></h3>
+                {% set mx = (m.series | map(attribute='total') | max) if (m.series | map(attribute='total') | max) else 1 %}
+                <div class="chart">
+                {% for s in m.series %}
+                    <div class="col {{ 'today' if loop.last else '' }}">
+                        <div class="tot">{{ s.total }}</div>
+                        <div class="bars">
+                            <div class="b b1" style="height:{{ (92 * s.info / mx) | round(0, 'floor') | int }}px" title="اطلاعات: {{ s.info }}"></div>
+                            <div class="b b2" style="height:{{ (92 * s.charge / mx) | round(0, 'floor') | int }}px" title="شارژ: {{ s.charge }}"></div>
+                            <div class="b b3" style="height:{{ (92 * s.shift / mx) | round(0, 'floor') | int }}px" title="شیفت: {{ s.shift }}"></div>
+                            <div class="b b4" style="height:{{ (92 * s.reset / mx) | round(0, 'floor') | int }}px" title="ریست رمز: {{ s.reset }}"></div>
+                        </div>
+                        <div class="day">{{ s.day }}</div>
+                    </div>
+                {% endfor %}
+                </div>
+                <div class="legend">
+                    <span><i style="background:var(--accent)"></i>شارژ</span>
+                    <span><i style="background:var(--green)"></i>اطلاعات</span>
+                    <span><i style="background:var(--yellow)"></i>شیفت</span>
+                    <span><i style="background:var(--red)"></i>ریست رمز</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- پوشش کارشناس -->
+        <div class="card mt" id="coverage">
+            <h3 class="sec-title">🎯 پوشش کارشناس‌ها
+                <small>{{ st.closed }} بسته حساب نمی‌شه</small></h3>
+            <div class="ring-wrap">
+                <div class="ring drill" data-dl="stores:unassigned" title="کلیک = لیست فروشگاه‌های بدون کارشناس" style="background:conic-gradient(var(--red) 0 {{ st.effective_pct }}%, var(--green) {{ st.effective_pct }}% 100%)">
+                    <div><b>{{ st.effective_pct }}٪</b><small>بدون کارشناس</small></div>
+                </div>
+                <div style="flex:1;min-width:250px;">
+                    {% for r in st.by_region[:8] %}
+                    <div class="rbar-row">
+                        <span>{{ r.region }}</span>
+                        <div class="rbar">
+                            <div class="rest" style="width:100%"></div>
+                            <i style="width:{{ r.pct }}%"></i>
+                        </div>
+                        <span style="font-size:.69rem;color:var(--muted);">{{ r.unassigned }}/{{ r.total }} <b style="color:var(--red)">{{ r.pct }}٪</b></span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div style="min-width:170px;">
+                    <div class="sum-line"><span>✔ دارای کارشناس</span><b class="drill" data-dl="stores:assigned" style="color:var(--green)">{{ st.assigned }}</b></div>
+                    <div class="sum-line"><span>! کارشناس منفک</span><b class="drill" data-dl="stores:separated" style="color:var(--yellow)">{{ st.separated_count }}</b></div>
+                    <div class="sum-line"><span>✕ تخصیص‌نشده</span><b class="drill" data-dl="stores:unassigned" style="color:var(--red)">{{ st.plain_unassigned_count }}</b></div>
+                    <div class="sum-line"><span>Σ کارشناس‌ها</span><b class="drill" data-dl="stores:by_expert">{{ st.expert_count }}</b></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- خلاصه‌ی دیتا -->
+        <div class="card mt" id="summary">
+            <h3 class="sec-title">📋 خلاصه‌ی دیتای فروشگاه‌ها
+                <small>کلیک روی هر عدد = لیست همون‌ها</small></h3>
+            <div class="sum-grid">
+                <div class="sum-tile drill" data-dl="stores:all">
+                    <div class="l">🏪 فروشگاه فعال</div>
+                    <div class="v">{{ st.total }}</div>
+                    <div class="sub">{{ st.closed }} بسته جدا شده</div>
+                </div>
+                <div class="sum-tile st-yellow drill" data-dl="stores:closed">
+                    <div class="l">🔒 بسته</div>
+                    <div class="v">{{ st.closed }}</div>
+                    <div class="sub">از شمارش خارج</div>
+                </div>
+                <div class="sum-tile drill" data-dl="stores:by_expert">
+                    <div class="l">👤 کارشناس فعال</div>
+                    <div class="v">{{ st.expert_count }}</div>
+                    <div class="sub">کلیک = لیست کارشناس‌ها</div>
+                </div>
+                <div class="sum-tile st-green drill" data-dl="stores:assigned">
+                    <div class="l">✔ کارشناس‌دار</div>
+                    <div class="v">{{ st.assigned }}</div>
+                    <div class="sub">دارای کارشناس</div>
+                </div>
+                <div class="sum-tile st-red drill" data-dl="stores:unassigned">
+                    <div class="l">🚫 بدون کارشناس</div>
+                    <div class="v">{{ st.effective_unassigned }}</div>
+                    <div class="sub">تخصیص‌نشده + منفک</div>
+                </div>
+                <div class="sum-tile st-green drill" data-dl="users:never">
+                    <div class="l">👻 بدون فعالیت</div>
+                    <div class="v">{{ m.never_active }}</div>
+                    <div class="sub">هیچ استفاده‌ای نکردن</div>
+                </div>
+                <div class="sum-tile st-yellow drill" data-dl="users:pending">
+                    <div class="l">⏳ در انتظار تایید</div>
+                    <div class="v">{{ m.pending_users }}</div>
+                    <div class="sub">ثبت‌نام، تاییدنشده</div>
+                </div>
+                <div class="sum-tile drill" data-dl="reqs:charge">
+                    <div class="l">⚡ درخواست شارژ باز</div>
+                    <div class="v" id="openCharge">{{ 0 }}</div>
+                    <div class="sub">پاسخ‌نشده</div>
+                </div>
+                <div class="sum-tile drill" data-dl="reqs:reset">
+                    <div class="l">🔑 درخواست ریست باز</div>
+                    <div class="v" id="openReset">{{ 0 }}</div>
+                    <div class="sub">پاسخ‌نشده</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:.75rem;">
+                <a href="/data">🗂 دیتا ←</a>
+                <a href="/upload">📁 آپلود ←</a>
+            </div>
+        </div>
+
+        <!-- کارشناس‌های منفک (جمع‌شونده، بسته پیش‌فرض) -->
+        {% if st.separated %}
+        <details class="sep-card" id="separated">
+            <summary>
+                🧍 <b>{{ st.separated_count }} فروشگاه</b> کارشناسِ منفک
+                {% for g in st.separated_groups %}<span class="badgey">{{ g.expert }} · {{ g.count }}</span>{% endfor %}
+            </summary>
+            {% for g in st.separated_groups %}
+            <p class="why"><b>{{ g.expert }}</b>: {{ g.reason }}</p>
+            {% endfor %}
+            <div class="sep-grid">
+                {% for s in st.separated %}
+                <div class="sep-i"><b>{{ s.code }}</b> — {{ s.name }}<span>{{ s.region }} · {{ s.file_expert }}</span></div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        <!-- بچه‌ها -->
+        <div class="card mt" id="team">
+            <h3 class="sec-title">👥 عملکرد بچه‌ها
+                <small>کلیک روی سرستون برای مرتب‌سازی</small></h3>
+            <div class="qbox">
+                <input type="text" id="q" placeholder="جستجو..." oninput="filterRows()">
+                <span class="chip on" data-f="all" onclick="setFilter(this)">همه</span>
+                <span class="chip" data-f="online" onclick="setFilter(this)">🟢 آنلاین</span>
+                <span class="chip" data-f="recent" onclick="setFilter(this)">🟡 اخیراً</span>
+                <span class="chip" data-f="idle" onclick="setFilter(this)">⚪ آفلاین</span>
+                <span class="chip" data-f="never" onclick="setFilter(this)">⚫ بدون حضور</span>
+                <span style="margin-inline-start:auto;font-size:.7rem;color:var(--muted)" id="count"></span>
+            </div>
+            <div class="table-wrap">
+            <table class="mtable" id="teamTable">
+                <thead>
+                    <tr>
+                        <th data-k="0" onclick="sortBy(this)">#</th>
+                        <th data-k="1" onclick="sortBy(this)">وضعیت</th>
+                        <th data-k="2" onclick="sortBy(this)">نام</th>
+                        <th data-k="3" onclick="sortBy(this)">آخرین حضور</th>
+                        <th data-k="4" onclick="sortBy(this)">امروز</th>
+                        <th data-k="5" onclick="sortBy(this)">شارژ</th>
+                        <th data-k="6" onclick="sortBy(this)">اطلاعات</th>
+                        <th data-k="7" onclick="sortBy(this)">شیفت</th>
+                        <th data-k="8" onclick="sortBy(this)">ریست</th>
+                        <th data-k="9" onclick="sortBy(this)">هفته</th>
+                        <th data-k="10" onclick="sortBy(this)">کل</th>
+                        <th data-k="11" onclick="sortBy(this)">تایید</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            </div>
+        </div>
+
+        <div class="grid3 mt">
+            <div class="card">
+                <h3 class="sec-title">🔔 مسئولین شارژ
+                    <small>کلیک = درخواست‌های باز</small></h3>
+                {% if m.admins %}
+                    {% set amax = m.admins[0].responded_count %}
+                    {% for a in m.admins %}
+                    <div class="perf">
+                        <span class="nm">{{ a.name }}</span>
+                        <span class="track"><i style="width:{{ (100 * a.responded_count / amax) | round(0, 'floor') | int }}%"></i></span>
+                        <span class="val drill" data-dl="reqs:charge">{{ a.responded_count }}</span>
+                    </div>
+                    <div class="perf-sub">میانگین {{ a.avg_response }} · ✅ {{ a.done_count }} · 🟢 {{ a.noissue_count }}</div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty">هنوز پاسخی ثبت نشده.</div>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <h3 class="sec-title">🔑 مسئولین ریست رمز
+                    <small>کلیک = درخواست‌های باز</small></h3>
+                {% if m.reset_admins %}
+                    {% set rmax = m.reset_admins[0].responded_count %}
+                    {% for a in m.reset_admins %}
+                    <div class="perf">
+                        <span class="nm">{{ a.name }}</span>
+                        <span class="track"><i style="width:{{ (100 * a.responded_count / rmax) | round(0, 'floor') | int }}%"></i></span>
+                        <span class="val drill" data-dl="reqs:reset">{{ a.responded_count }}</span>
+                    </div>
+                    <div class="perf-sub">میانگین {{ a.avg_response }} · ✅ {{ a.done_count }} · ❌ {{ a.wrong_count }}</div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty">هنوز پاسخی ثبت نشده.</div>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <h3 class="sec-title">🔥 پرجستجوترین فروشگاه‌ها
+                    <small>کلیک = جزئیات</small></h3>
+                {% if m.hot_stores %}
+                    {% for h in m.hot_stores %}
+                    <div class="rank drill" data-dl="store:{{ h.code }}"
+                         style="align-items:flex-start;flex-direction:column;">
+                        <div style="display:flex;align-items:center;gap:8px;width:100%;">
+                            <span class="idx">{{ loop.index }}</span>
+                            <span class="grow"><b style="direction:ltr;display:inline-block">{{ h.code }}</b>
+                                <span style="color:var(--muted);font-size:.68rem">{{ h.location or '—' }}</span></span>
+                            <span class="v">{{ h.total }}</span>
+                        </div>
+                        <div class="hot-tags">
+                            {% if h.actions.get("charge") %}<span>⚡ شارژ {{ h.actions.charge }}</span>{% endif %}
+                            {% if h.actions.get("info") %}<span>📄 اطلاعات {{ h.actions.info }}</span>{% endif %}
+                            {% if h.actions.get("reset") %}<span>🔑 ریست {{ h.actions.reset }}</span>{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty">هنوز جستجویی ثبت نشده.</div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- مودال دکلیک اعداد -->
+<div class="dl-overlay" id="dlOverlay" hidden>
+    <div class="dl-modal" role="dialog" aria-modal="true">
+        <div class="dl-head">
+            <b id="dlTitle"></b>
+            <span class="dl-count" id="dlCount"></span>
+            <button type="button" class="dl-close" onclick="closeDl()" aria-label="بستن">✕</button>
+        </div>
+        <div class="dl-body" id="dlBody"></div>
+    </div>
+</div>
+
+<script>
+const ROWS = {{ (monitor.users | tojson) }};
+const STATES = {{ (monitor.states | tojson) }};
+let filter = 'all', sortK = null, sortAsc = true;
+let auto = true, timer = null, tick = null, left = 30;
+
+const DOT = { online: '🟢', recent: '🟡', idle: '⚪', unseen: '⚫' };
+const LABEL = { online: 'آنلاین', recent: 'اخیراً فعال', idle: 'آفلاین', unseen: 'بدون حضور' };
+const ORDER = { online: 0, recent: 1, idle: 2, unseen: 3 };
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function paint() {
+  const q = (document.getElementById('q').value || '').trim().toLowerCase();
+  let rows = ROWS.filter(u => {
+    const okF = filter === 'all'
+      || (filter === 'never' ? (u.state === 'unseen' && u.total === 0) : u.state === filter);
+    const okQ = !q || (u.name + ' ' + u.username).toLowerCase().includes(q);
+    return okF && okQ;
+  });
+
+  if (sortK !== null) {
+    rows = rows.slice().sort((a, b) => {
+      const va = orderVal(a, sortK), vb = orderVal(b, sortK);
+      const r = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'fa');
+      return sortAsc ? r : -r;
+    });
+  }
+
+  const tb = document.querySelector('#teamTable tbody');
+  tb.innerHTML = rows.map((u, i) => {
+    const mx = Math.max(u.messages_today, u.messages, 1);
+    const pct = Math.floor(100 * u.messages / mx);
+    const cls = u.state === 'online' ? 'm-green' : (u.state === 'recent' ? 'm-yellow' : '');
+    return `<tr>
+      <td class="num">${i + 1}</td>
+      <td class="st-${u.state}"><span class="dot">${DOT[u.state]}</span>${LABEL[u.state]}</td>
+      <td>${esc(u.name)}${u.username ? `<br><span style="color:var(--muted);font-size:.64rem" dir="ltr">@${esc(u.username)}</span>` : ''}</td>
+      <td>${esc(u.last_seen_human)}<br><span style="color:var(--muted);font-size:.62rem">${esc(u.last_seen_jalali)}</span></td>
+      <td><div style="display:flex;align-items:center;gap:6px"><span class="num" style="min-width:18px">${u.messages_today}</span>
+        <span class="mbar ${cls}" style="flex:1"><i style="width:${pct}%"></i></span></div></td>
+      <td class="num">${u.charge}</td><td class="num">${u.info}</td><td class="num">${u.shift}</td><td class="num">${u.reset}</td>
+      <td class="num"><b>${u.week_total}</b></td><td class="num">${u.total}</td>
+      <td>${u.approved ? '<span style="color:var(--green)">✔️</span>' : '<span style="color:var(--yellow);font-size:.7rem">در انتظار</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('count').textContent = rows.length + ' نفر از ' + ROWS.length;
+}
+
+function orderVal(u, k) {
+  if (k === 1) return ORDER[u.state];
+  if (k === 2) return u.name;
+  if (k === 3) return u.last_seen || '';
+  if (k === 4) return u.messages_today;
+  if (k === 5) return u.charge;
+  if (k === 6) return u.info;
+  if (k === 7) return u.shift;
+  if (k === 8) return u.reset;
+  if (k === 9) return u.week_total;
+  if (k === 10) return u.total;
+  if (k === 11) return u.approved ? 1 : 0;
+  return u.messages;
+}
+
+function setFilter(el) {
+  filter = el.dataset.f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  paint();
+}
+
+function sortBy(th) {
+  const k = +th.dataset.k;
+  if (sortK === k) sortAsc = !sortAsc; else { sortK = k; sortAsc = true; }
+  document.querySelectorAll('#teamTable th').forEach(t => t.classList.remove('sorted'));
+  th.classList.add('sorted');
+  paint();
+}
+
+function paintAlerts(list) {
+  const box = document.getElementById('alerts');
+  if (!box) return;
+  box.innerHTML = (list && list.length)
+    ? list.map(a => `<a class="alert ${a.level}" href="${a.link}">
+        <b>${esc(a.icon)} ${esc(a.title)}</b><span>${esc(a.body)}</span></a>`).join('')
+    : '<div class="alert info"><b>✅ همه‌چیز مرتبه</b><span>هشداری ثبت نشده.</span></div>';
+}
+
+async function refresh(manual) {
+  try {
+    const res = await fetch('/api/monitor/full', { credentials: 'same-origin' });
+    if (res.status === 401) { location.href = '/login'; return; }
+    const d = await res.json();
+    if (d.error) return;
+
+    ROWS.length = 0;
+    d.users.forEach(u => ROWS.push(u));
+    paint();
+
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('hOnline', d.states.online);
+    set('hToday', d.active_today);
+    set('hNo', d.stores.effective_unassigned);
+    set('hSep', d.stores.separated_count);
+    set('hWeek', d.week_total);
+    set('stamp', d.generated_jalali);
+    paintAlerts(d.alerts);
+    refreshOpenCounts();
+
+    if (manual) {
+      left = 30;
+      const dot = document.getElementById('pulse');
+      dot.style.opacity = '.3';
+      setTimeout(() => { dot.style.opacity = '1'; }, 250);
+    }
+  } catch (e) { /* قطعی شبکه */ }
+}
+
+function toggleAuto() {
+  auto = !auto;
+  const btn = document.getElementById('autoBtn');
+  const dot = document.getElementById('pulse');
+  if (auto) {
+    btn.textContent = '⏸ خودکار';
+    dot.classList.add('on'); dot.classList.remove('pause');
+    timer = setInterval(() => refresh(false), 30000);
+    tick = setInterval(() => { left = (left > 0 ? left : 30) - 1; showNext(); }, 1000);
+  } else {
+    btn.textContent = '▶ ادامه‌ی خودکار';
+    dot.classList.remove('on'); dot.classList.add('pause');
+    clearInterval(timer); clearInterval(tick);
+    document.getElementById('nextIn').textContent = 'تازه‌سازی خودکار متوقفه';
+  }
+}
+
+function showNext() {
+  const el = document.getElementById('nextIn');
+  if (el) el.textContent = 'تازه‌سازی ' + left + 's';
+}
+
+function jumpTo(targetId) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  if (targetId === 'separated') el.open = true;      // باز کردن لیست ۸۴ منفک
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  history.replaceState(null, '', '#' + targetId);
+}
+
+document.getElementById('alerts').addEventListener('click', function (e) {
+  const a = e.target.closest('a');
+  if (!a) return;
+  const m = (a.getAttribute('href') || '').match(/#([\w-]+)$/);
+  if (m) { e.preventDefault(); jumpTo(m[1]); }
+});
+
+paint();
+showNext();
+timer = setInterval(() => refresh(false), 30000);
+tick = setInterval(() => { left = (left > 0 ? left : 30) - 1; showNext(); }, 1000);
+
+/* ===== مودال دکلیک اعداد ===== */
+const dlOverlay = document.getElementById('dlOverlay');
+const dlTitle = document.getElementById('dlTitle');
+const dlCount = document.getElementById('dlCount');
+const dlBody = document.getElementById('dlBody');
+
+function openDl(title, html, count) {
+  dlTitle.textContent = title;
+  dlCount.textContent = (count ?? '') + '';
+  dlBody.innerHTML = html;
+  dlOverlay.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeDl() {
+  dlOverlay.hidden = true;
+  document.body.style.overflow = '';
+}
+dlOverlay.addEventListener('click', function (e) { if (e.target === dlOverlay) closeDl(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDl(); });
+
+function setBody(txt) { return `<div class="dl-empty">${txt}</div>`; }
+
+const DL_USER_META = {
+  online: { t: '🟢 آنلاین', f: u => u.state === 'online' },
+  recent: { t: '🟡 اخیراً فعال', f: u => u.state === 'recent' },
+  idle: { t: '⚪ آفلاین', f: u => u.state === 'idle' },
+  unseen: { t: '⚫ بدون حضور', f: u => u.state === 'unseen' },
+  never: { t: '👻 بدون فعالیت', f: u => u.state === 'unseen' && u.total === 0 },
+  pending: { t: '⏳ در انتظار تایید', f: u => !u.approved },
+  active_today: { t: '📊 فعال امروز', f: u => u.messages_today > 0 },
+  week: { t: '📈 فعال این هفته', f: u => u.week_total > 0 },
+  all: { t: '👥 همه بچه‌ها', f: () => true },
+};
+
+function dlUsers(spec) {
+  const meta = DL_USER_META[spec] || DL_USER_META.all;
+  const rows = ROWS.filter(meta.f);
+  const html = rows.length
+    ? rows.map(u => `
+      <div class="dl-item">
+        <span class="dot">${DOT[u.state]}</span>
+        <span class="grow">
+          <b>${esc(u.name)}</b>
+          ${u.username ? `<span class="muted" dir="ltr">@${esc(u.username)}</span>` : ''}
+        </span>
+        <span class="muted">امروز ${u.messages_today} · کل ${u.total}</span>
+        ${u.approved ? '' : '<span class="tag">تاییدنشده</span>'}
+      </div>`).join('')
+    : setBody('کسی اینجا نیست.');
+  openDl(meta.t, html, rows.length + ' نفر');
+}
+
+function dlStores(group) {
+  openDl('در حال بارگذاری…', '<div class="dl-empty">⏳</div>', '');
+  fetch('/api/monitor/stores?group=' + encodeURIComponent(group), { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) { openDl('خطا', setBody('دسترسی ندارید.'), ''); return; }
+      if (group === 'by_expert') {
+        const html = d.items.length
+          ? d.items.map(g => `
+            <div class="dl-subtitle">👤 ${esc(g.expert)} · ${g.count} فروشگاه</div>
+            <div class="dl-grid">
+              ${g.stores.map(s => `<div class="dl-tile"><b class="dl-code">${esc(s.code)}</b> ${esc(s.name || '')}<span class="muted" style="display:block">${esc(s.region)}</span></div>`).join('')}
+            </div>`).join('')
+          : setBody('داده‌ای نیست.');
+        openDl('👤 لیست کارشناس‌ها و فروشگاه‌هاشون', html, d.items.length + ' کارشناس');
+        return;
+      }
+      const statusTxt = { unassigned: '🚫 بدون کارشناس', separated: '🧍 منفک', assigned: '✔ کارشناس‌دار' };
+      const html = d.items.length
+        ? d.items.map(s => `
+          <div class="dl-item">
+            <b class="dl-code">${esc(s.code)}</b>
+            <span class="grow">${esc(s.name || '—')}
+              <span class="sub" style="display:block">${esc(s.region)}${s.expert && s.expert !== '—' ? ' · کارشناس: ' + esc(s.expert) : ''}</span></span>
+            ${s.status ? `<span class="tag">${statusTxt[s.status] || s.status}</span>` : ''}
+          </div>`).join('')
+        : setBody('چیزی پیدا نشد.');
+      openDl(d.title || group, html, d.total + ' مورد');
+    })
+    .catch(() => openDl('خطا', setBody('اتصال برقرار نشد.'), ''));
+}
+
+const ACT_LABEL = { charge: 'شارژ', info: 'اطلاعات', shift: 'شیفت', reset: 'ریست' };
+
+function dlStore(code) {
+  openDl('در حال بارگذاری…', '<div class="dl-empty">⏳</div>', '');
+  fetch('/api/monitor/store/' + encodeURIComponent(code), { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) { openDl('خطا', setBody('دسترسی ندارید.'), ''); return; }
+      const stTxt = d.closed ? '🔒 بسته'
+        : d.status === 'unassigned' ? '🚫 بدون کارشناس'
+        : d.status === 'separated' ? '🧍 منفک' : '✔ کارشناس‌دار';
+      const acts = Object.entries(d.usage.actions).map(([k, v]) => `<span class="tag">${ACT_LABEL[k] || k} ${v}</span>`).join('');
+      const maxD = Math.max(...d.series.map(s => s.total), 1);
+      const bars = d.series.map(s => `
+        <div class="dl-tile" style="text-align:center">
+          <b style="font-size:.85rem">${s.total}</b>
+          <div style="background:var(--card);border-radius:4px;height:26px;margin-top:4px;position:relative;overflow:hidden">
+            <i style="position:absolute;inset-inline:0;bottom:0;height:${Math.round(100 * s.total / maxD)}%;background:var(--accent)"></i></div>
+          <span class="muted" style="display:block;margin-top:3px">${s.label}</span>
+        </div>`).join('');
+      const html = `
+        <div class="dl-item">
+          <b class="dl-code">${esc(d.code)}</b>
+          <span class="grow">${esc(d.name)}
+            <span class="sub" style="display:block">منطقه: ${esc(d.region)} · کارشناس: ${esc(d.expert)}</span></span>
+          <span class="tag">${stTxt}</span>
+        </div>
+        <div class="dl-subtitle">🔎 آمار جستجو</div>
+        <div class="dl-grid">
+          <div class="dl-tile"><span class="muted">کل</span><b style="display:block;font-size:1rem">${d.usage.total}</b></div>
+          ${acts || '<div class="dl-tile muted">هنوز جستجویی ثبت نشده</div>'}
+        </div>
+        <div class="dl-subtitle">📅 ۷ روز اخیر (${d.series.filter(s => s.total).length} روز با درخواست)</div>
+        <div class="dl-grid">${bars}</div>`;
+      openDl('🏪 فروشگاه ' + code, html, d.usage.total);
+    })
+    .catch(() => openDl('خطا', setBody('اتصال برقرار نشد.'), ''));
+}
+
+function humanAge(sec) {
+  if (typeof sec !== 'number') return '';
+  const m = Math.floor(sec / 60);
+  if (m < 1) return 'لحظاتی پیش';
+  if (m < 60) return m + ' دقیقه پیش';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' ساعت پیش';
+  return Math.floor(h / 24) + ' روز پیش';
+}
+
+function dlRequests(kind) {
+  const meta = kind === 'reset'
+    ? { t: '🔑 درخواست‌های باز ریست رمز', e: '🔑' }
+    : { t: '⚡ درخواست‌های باز شارژ', e: '⚡' };
+  openDl('در حال بارگذاری…', '<div class="dl-empty">⏳</div>', '');
+  fetch('/api/requests/open?kind=' + encodeURIComponent(kind), { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) { openDl('خطا', setBody('دسترسی ندارید.'), ''); return; }
+      const html = d.items.length
+        ? d.items.map(x => `
+          <div class="dl-item">
+            <span>${meta.e}</span>
+            <span class="grow">
+              <b dir="ltr" style="display:inline-block">${esc(x.target)}</b>
+              ${x.display_name ? `<span class="muted"> · ${esc(x.display_name)}</span>` : ''}
+              <span class="sub" style="display:block">${x.created_jalali ? 'ثبت: ' + esc(x.created_jalali) : ''} · ${humanAge(x.age_seconds)}</span>
+            </span>
+            <span class="tag">${x.group_chat_id || ''}</span>
+          </div>`).join('')
+        : setBody('درخواست بازِ پاسخ‌نشده‌ای نیست. 🎉');
+      openDl(meta.t, html, d.total + ' درخواست');
+    })
+    .catch(() => openDl('خطا', setBody('اتصال برقرار نشد.'), ''));
+}
+
+document.addEventListener('click', function (e) {
+  const el = e.target.closest('[data-dl]');
+  if (!el) return;
+  e.preventDefault();
+  const spec = el.getAttribute('data-dl');
+  const [type, arg] = spec.split(':');
+  if (type === 'users') dlUsers(arg);
+  else if (type === 'stores') dlStores(arg);
+  else if (type === 'store') dlStore(arg);
+  else if (type === 'reqs') dlRequests(arg);
+});
+
+function refreshOpenCounts() {
+  fetch('/api/requests/open?kind=charge', { credentials: 'same-origin' }).then(r => r.json())
+    .then(d => { if (!d.error) document.getElementById('openCharge').textContent = d.total; }).catch(() => {});
+  fetch('/api/requests/open?kind=reset', { credentials: 'same-origin' }).then(r => r.json())
+    .then(d => { if (!d.error) document.getElementById('openReset').textContent = d.total; }).catch(() => {});
+}
+refreshOpenCounts();
+</script>
+</body>
+</html>

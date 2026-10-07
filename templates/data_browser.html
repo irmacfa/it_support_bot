@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+{% include "_layout_head.html" %}
+<title>نمایش کامل دیتا | پنل مدیریت</title>
+<style>
+.tabs-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 10px 18px; background: var(--card2); border: 1px solid var(--border);
+  color: var(--muted); border-radius: 10px; cursor: pointer; font-family: inherit;
+  font-size: 0.88rem; transition: all .15s;
+}
+.tab-btn:hover { color: var(--text); border-color: var(--accent); }
+.tab-btn.active { background: rgba(59,130,246,.15); color: var(--accent); border-color: var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.search-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.search-row input[type="text"] { margin-bottom: 0; max-width: 320px; }
+.row-count { font-size: 0.8rem; color: var(--muted); }
+.btn.btn-active { background: rgba(59,130,246,.2); color: var(--accent); border-color: var(--accent); }
+table.data-table th, table.data-table td { white-space: nowrap; }
+table.data-table th {
+  cursor: pointer; user-select: none; position: relative; padding-left: 22px;
+}
+table.data-table th:hover { color: var(--accent); }
+table.data-table th .sort-arrow { position: absolute; left: 8px; opacity: 0.5; }
+table.data-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+tr.past-row td {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--red);
+  text-decoration-thickness: 2px;
+  opacity: 0.6;
+}
+.unset-expert { color: var(--yellow); font-weight: 600; }
+
+/* ==== انتخاب ستون‌های فهرست فروشگاه‌ها ==== */
+.col-picker-overlay {
+  display: none; position: fixed; inset: 0; z-index: 60;
+  background: rgba(15,23,42,.72); backdrop-filter: blur(3px);
+  align-items: center; justify-content: center; padding: 24px;
+}
+.col-picker-overlay.active { display: flex; }
+.col-picker {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  width: min(760px, 100%); max-height: 82vh; display: flex; flex-direction: column;
+}
+.col-picker-head {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.col-picker-head h3 { margin: 0; font-size: 16px; }
+.col-picker-body { padding: 16px 20px; overflow-y: auto; }
+.col-picker-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.col-picker-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+}
+.col-picker-item:hover { border-color: var(--accent); }
+.col-picker-item.locked { opacity: 0.75; cursor: default; }
+.col-picker-item input { cursor: pointer; }
+.col-picker-item.locked input { cursor: not-allowed; }
+.col-picker-foot {
+  padding: 14px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-end; align-items: center;
+}
+.col-picker-foot .hint { margin: 0; }
+
+/* ==== ویرایش گروهی کارشناس ==== */
+.bulk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bulk-grid .full { grid-column: 1 / -1; }
+.bulk-grid label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 5px; }
+.bulk-grid input[type="text"], .bulk-grid input[type="number"] { margin-bottom: 0; }
+.bulk-quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.bulk-quick button {
+  font-family: inherit; font-size: 0.76rem; padding: 4px 10px; cursor: pointer;
+  background: var(--card2); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px;
+}
+.bulk-quick button:hover { border-color: var(--accent); color: var(--text); }
+.bulk-preview {
+  margin-top: 14px; padding: 12px; border-radius: 8px;
+  background: var(--card2); border: 1px solid var(--border); font-size: 0.85rem;
+}
+.bulk-preview.warn { border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.08); }
+.bulk-preview ul { margin: 8px 0 0; padding-right: 18px; color: var(--muted); }
+
+/* ==== تب لیست کارشناسان ==== */
+.exp-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.exp-head {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  background: var(--card2); cursor: pointer; user-select: none;
+}
+.exp-head:hover { border-color: var(--accent); }
+.exp-head .caret { transition: transform .15s; color: var(--muted); font-size: .8rem; }
+.exp-group.open .exp-head .caret { transform: rotate(-90deg); }
+.exp-head .exp-name { font-weight: 600; }
+.exp-head .exp-count {
+  font-size: .74rem; padding: 2px 9px; border-radius: 999px;
+  background: rgba(59,130,246,.16); color: var(--accent);
+}
+.exp-head.unset .exp-name { color: #f59e0b; }
+.exp-head .spacer { flex: 1; }
+.exp-body { display: none; padding: 4px 0; }
+.exp-group.open .exp-body { display: block; }
+.exp-body td.pick { width: 1%; }
+.exp-body select {
+  font-family: inherit; font-size: .78rem; padding: 3px 6px; margin: 0;
+  min-width: 150px; cursor: pointer;
+}
+.exp-tools { display: flex; gap: 6px; align-items: center; }
+.exp-tools input[type="text"] { margin: 0; padding: 4px 8px; font-size: .78rem; min-width: 150px; }
+@media (max-width: 560px) {
+  .exp-head { flex-wrap: wrap; }
+  .exp-body { overflow-x: auto; }
+  .bulk-grid { grid-template-columns: 1fr; }
+}
+
+.bulk-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+            margin:14px 0; padding:11px 14px; border:1px solid var(--border);
+            border-radius:10px; background:rgba(59,130,246,.07); }
+.bulk-info { font-size:.82rem; color:var(--muted); }
+select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,.25); }
+.announce-box { margin:18px 0 6px; padding:16px; border:1px solid var(--border); border-radius:12px; }
+.announce-box h3 { margin:0 0 8px; font-size:1rem; }
+.region-wrap { max-height:340px; overflow:auto; }
+.announce-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+#announceText { padding:10px; border:1px solid var(--border); border-radius:8px;
+                background:var(--bg-soft); color:var(--text); }
+</style>
+</head>
+<body>
+{% include "_sidebar.html" %}
+<div class="main">
+    <div class="topbar">نمایش کامل دیتا</div>
+    <div class="content">
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+            همه‌ی ردیف‌ها و ستون‌های فایل‌های اکسل آپلودشده، دقیقاً همون‌طور که تو فایل هست. یه جدول رو از دکمه‌های زیر انتخاب کن، تو هر جدول می‌تونی سرچ کنی، و با کلیک روی سرستون‌ها مرتبش کنی. تو جدول شیفت، تاریخ‌های گذشته با خط قرمز مشخص و به پایین جدول رانده می‌شن.
+        </p>
+
+        {% if store_groups or info_groups or schedule_rows or directory_rows %}
+        <div class="tabs-row">
+            {% if directory_rows %}
+            <button type="button" class="tab-btn {{ 'active' if not store_groups else '' }}" onclick="showTab('panel-directory', this)">🗂 فهرست کامل فروشگاه‌ها ({{ directory_rows | length }})</button>
+            {% endif %}
+            {% if expert_groups %}
+            <button type="button" class="tab-btn {{ 'active' if not store_groups and not directory_rows else '' }}" onclick="showTab('panel-experts', this)">👤 لیست کارشناسان ({{ expert_groups | length }})</button>
+            {% endif %}
+            {% for source, group in store_groups.items() %}
+            <button type="button" class="tab-btn {{ 'active' if loop.first else '' }}" onclick="showTab('panel-store-{{ loop.index }}', this)">📶 {{ source }} ({{ group.rows | length }})</button>
+            {% endfor %}
+            {% if info_groups %}
+            <button type="button" class="tab-btn {{ 'active' if not store_groups and not directory_rows else '' }}" onclick="showTab('panel-info', this)">📋 اطلاعات فروشگاه‌ها</button>
+            {% endif %}
+            {% if schedule_rows %}
+            <button type="button" class="tab-btn {{ 'active' if not store_groups and not info_groups and not directory_rows else '' }}" onclick="showTab('panel-schedule', this)">🗓 برنامه شیفت ({{ schedule_rows | length }})</button>
+            {% endif %}
+        </div>
+
+        {% if directory_rows %}
+        <div class="tab-panel {{ 'active' if not store_groups else '' }}" id="panel-directory">
+            <div class="card">
+                <div class="search-row">
+                    <input type="text" placeholder="جستجو در کد، نام، شهر، منطقه یا کارشناس..." oninput="filterTable('directory', this.value)">
+                    <button type="button" class="btn btn-sm" onclick="openDirColumns()">⚙️ انتخاب ستون‌ها</button>
+                    <button type="button" class="btn btn-sm" onclick="openBulkExpert()">✏️ ویرایش گروهی کارشناس</button>
+                    <button type="button" class="btn btn-sm" onclick="toggleOnlyUnassigned()">🔎 فقط {{ expert_unset }}</button>
+                    <span class="row-count" id="directory-count">{{ directory_rows | length }} ردیف</span>
+                </div>
+                {% if directory_unassigned %}
+                <div class="hint" style="margin:0 0 12px;">
+                    ⚠️ <b>{{ directory_unassigned }}</b> فروشگاه کارشناس نداره و با «{{ expert_unset }}» مشخص شده.
+                    برای رفع، ستون <b>{{ expert_column }}</b> رو توی فایل اکسل پر کن و از بخش آپلود بفرست.
+                </div>
+                {% endif %}
+                <div class="table-wrap">
+                <table class="data-table" id="directory">
+                    <thead>
+                        <tr>
+                            {% for col in directory_columns %}
+                            <th onclick="sortTable('directory', {{ loop.index0 }}, this)">{{ col.label }}<span class="sort-arrow"></span></th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%- for row in directory_rows %}
+                        <tr>{% for col in directory_columns %}{% set value = row.get(col.key, '') %}{% if col.key == expert_column and value == expert_unset %}<td class="unset-expert">⚠️ {{ value }}</td>{% else %}<td>{{ value }}</td>{% endif %}{% endfor %}</tr>
+                        {%- endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if expert_groups %}
+        <div class="tab-panel {{ 'active' if not store_groups and not directory_rows else '' }}" id="panel-experts">
+            <div class="card">
+                <div class="search-row">
+                    <input type="text" placeholder="جستجوی کارشناس، کد یا نام فروشگاه..." oninput="filterExpertGroups(this.value)">
+                    <button type="button" class="btn btn-sm" onclick="toggleAllExpertGroups(this)">▾ باز/بستن همه</button>
+                    <span class="row-count">{{ directory_rows | length }} فروشگاه در {{ expert_groups | length }} گروه</span>
+                </div>
+                <p class="hint" style="margin:0 0 12px;">
+                    هر بخش یک کارشناسه و فروشگاه‌های زیرمون رو نشون می‌ده.
+                    از ستون «کارشناس» می‌تونی کارشناسِ یک فروشگاه رو عوض کنی، و با
+                    «✏️ تغییر نام» اسم کارشناس رو روی همه‌ی فروشگاه‌هایش یک‌جا تغییر بدی.
+                </p>
+                {% for group in expert_groups %}
+                <div class="exp-group{% if loop.first %} open{% endif %}{% if group.expert == expert_unset %} unset{% endif %}"
+                     data-expert="{{ group.expert }}" data-count="{{ group.count }}">
+                    <div class="exp-head" onclick="toggleExpertGroup(this)">
+                        <span class="caret">▼</span>
+                        <span class="exp-name">{{ group.expert }}</span>
+                        <span class="exp-count">{{ group.count }} فروشگاه</span>
+                        <span class="spacer"></span>
+                        {% if group.expert != expert_unset %}
+                        <span class="exp-tools" onclick="event.stopPropagation()">
+                            <input type="text" placeholder="نام جدید..." id="rn-{{ loop.index0 }}">
+                            <button type="button" class="btn btn-sm"
+                                    onclick="doRenameExpert({{ loop.index0 }}, '{{ group.expert }}')">✏️ تغییر نام</button>
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="exp-body">
+                        <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>کد فروشگاه</th>
+                                    <th>نام فروشگاه</th>
+                                    <th>منطقه</th>
+                                    <th>نام کارشناس</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {%- for st in group.stores %}
+                                <tr><td>{{ st.code }}</td><td>{{ st.name }}</td><td>{{ st.region }}</td><td class="pick"><select data-code="{{ st.code }}" data-prev="{{ group.expert }}" onchange="markStoreExpertPending(this)">{% for name in expert_names %}<option value="{{ name }}"{% if name == group.expert %} selected{% endif %}>{{ name }}</option>{% endfor %}<option value="{{ expert_unset }}"{% if group.expert == expert_unset %} selected{% endif %}>{{ expert_unset }}</option></select></td></tr>
+                                {%- endfor %}
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <div class="bulk-bar">
+                    <span class="bulk-info" id="bulkPending">همه‌ی تغییرات ذخیره شده است.</span>
+                    <button type="button" class="btn btn-active" id="bulkSaveBtn"
+                            onclick="saveAllStoreExperts()" disabled>💾 ذخیره‌ی گروهی تغییرات</button>
+                </div>
+
+                <div class="announce-box">
+                    <h3>🗺 کارشناس انفورماتیک هر منطقه</h3>
+                    <p class="hint" style="margin:0 0 10px;">
+                        کارشناس هر منطقه را انتخاب کن و «ذخیره» را بزن. بعد با دکمه‌های پایین
+                        می‌توانی همین جدول را یا فروشگاه‌های بدون کارشناس را برای گروه
+                        <b>{{ announce_group_title }}</b> بفرستی — اول پیش‌نمایش می‌آید، بعد تأیید.
+                    </p>
+                    <div class="table-wrap region-wrap">
+                        <table class="data-table" id="regionTable">
+                            <thead>
+                                <tr>
+                                    <th>منطقه</th>
+                                    <th>تعداد فروشگاه</th>
+                                    <th>مدیر منطقه</th>
+                                    <th>کارشناس انفورماتیک</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {%- for r in region_rows %}
+                                <tr><td>{{ r.region }}</td><td>{{ r.count }}</td><td>{{ r.manager or '—' }}</td><td class="pick"><select data-region="{{ r.region }}" data-prev="{{ r.expert }}" onchange="if (this.dataset.prev !== this.value) this.classList.add('dirty'); refreshRegionBar()"><option value="">فاقد کارشناس</option>{% for name in expert_names %}<option value="{{ name }}"{% if name == r.expert %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></td></tr>
+                                {%- endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="bulk-bar">
+                        <span class="bulk-info" id="regionPending">کارشناس مناطق ذخیره شده است.</span>
+                        <button type="button" class="btn btn-active" id="regionSaveBtn"
+                                onclick="saveRegionExperts()" disabled>💾 ذخیره‌ی کارشناس مناطق</button>
+                    </div>
+                    <div class="announce-actions">
+                        <button type="button" class="btn btn-outline" onclick="announcePreview('regions')">
+                            👁️ پیش‌نمایش پیام «کارشناس مناطق»
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="announcePreview('unassigned')">
+                            👁️ پیش‌نمایش پیام «فروشگاه‌های بدون کارشناس»
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% for source, group in store_groups.items() %}
+        <div class="tab-panel {{ 'active' if loop.first else '' }}" id="panel-store-{{ loop.index }}">
+            <div class="card">
+                <div class="search-row">
+                    <input type="text" placeholder="جستجو..." oninput="filterTable('store-{{ loop.index }}', this.value)">
+                    <span class="row-count" id="store-{{ loop.index }}-count">{{ group.rows | length }} ردیف نمایش داده می‌شه</span>
+                </div>
+                <div class="table-wrap">
+                <table class="data-table" id="store-{{ loop.index }}">
+                    <thead>
+                        <tr>
+                            {% for col in group.columns %}
+                            <th onclick="sortTable('store-{{ loop.index }}', {{ loop.index0 }}, this)">{{ col }}<span class="sort-arrow"></span></th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%- for row in group.rows %}
+                        <tr>{% for col in group.columns %}<td>{{ row.get(col, "") or "-" }}</td>{% endfor %}</tr>
+                        {%- endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if info_groups %}
+        <div class="tab-panel {{ 'active' if not store_groups else '' }}" id="panel-info">
+            {% for source, group in info_groups.items() %}
+            <div class="card" style="margin-bottom:16px;">
+                <div class="search-row">
+                    <strong style="font-size:15px;">📄 {{ group.title or source }}</strong>
+                    <input type="text" placeholder="جستجو..." oninput="filterTable('info-{{ loop.index }}', this.value)">
+                    <span class="row-count" id="info-{{ loop.index }}-count">{{ group.rows | length }} ردیف نمایش داده می‌شه</span>
+                </div>
+                <div class="table-wrap">
+                <table class="data-table" id="info-{{ loop.index }}">
+                    <thead>
+                        <tr>
+                            {% for col in group.columns %}
+                            <th onclick="sortTable('info-{{ loop.index }}', {{ loop.index0 }}, this)">{{ col }}<span class="sort-arrow"></span></th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%- for row in group.rows %}
+                        <tr>{% for col in group.columns %}<td>{{ row.get(col, "") or "-" }}</td>{% endfor %}</tr>
+                        {%- endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+{% if schedule_rows %}
+        <div class="tab-panel {{ 'active' if not store_groups and not info_groups else '' }}" id="panel-schedule">
+            <div class="card">
+                <div class="search-row">
+                    <input type="text" placeholder="جستجو..." oninput="filterTable('schedule-table', this.value)">
+                    <span class="row-count" id="schedule-table-count">{{ schedule_rows | length }} ردیف نمایش داده می‌شه</span>
+                    <a href="/schedule" style="font-size:0.82rem;">🗓 ویرایش برنامه شیفت</a>
+                </div>
+                <div class="table-wrap">
+                <table class="data-table" id="schedule-table">
+                    <thead>
+                        <tr>
+                            {% for col in schedule_columns %}
+                            <th onclick="sortTable('schedule-table', {{ loop.index0 }}, this)">{{ col }}<span class="sort-arrow"></span></th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in schedule_rows %}
+                        <tr data-date="{{ row.get('تاریخ', '') }}">
+                            {% for col in schedule_columns %}
+                            <td>{{ row.get(col, "") or "-" }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="empty">هنوز هیچ فایلی آپلود نشده.</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const TODAY_JALALI = {{ (today_jalali or "") | tojson }};
+
+function showTab(panelId, btn) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  panel.classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+/* بازکردن تب از روی hash (مثلاً /data#experts) */
+function filterTable(tableId, query) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const q = query.trim().toLowerCase();
+  const rows = table.tBodies[0].rows;
+  let visible = 0;
+  for (const row of rows) {
+    const match = !q || row.textContent.toLowerCase().includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) visible++;
+  }
+  const counter = document.getElementById(tableId + '-count');
+  if (counter) counter.textContent = visible + ' ردیف نمایش داده می‌شه';
+}
+
+function sortTable(tableId, colIndex, thEl) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+
+  const prevCol = table.dataset.sortCol;
+  const prevDir = table.dataset.sortDir;
+  const dir = (prevCol == colIndex && prevDir === 'asc') ? 'desc' : 'asc';
+
+  rows.sort((a, b) => {
+    const av = a.cells[colIndex].textContent.trim();
+    const bv = b.cells[colIndex].textContent.trim();
+    const an = parseFloat(av.replace(/,/g, ''));
+    const bn = parseFloat(bv.replace(/,/g, ''));
+    let cmp;
+    if (!isNaN(an) && !isNaN(bn) && av !== '' && bv !== '') {
+      cmp = an - bn;
+    } else {
+      cmp = av.localeCompare(bv, 'fa');
+    }
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  rows.forEach(row => tbody.appendChild(row));
+  table.dataset.sortCol = colIndex;
+  table.dataset.sortDir = dir;
+
+  table.querySelectorAll('th').forEach(th => {
+    th.classList.remove('sorted');
+    th.querySelector('.sort-arrow').textContent = '';
+  });
+  thEl.classList.add('sorted');
+  thEl.querySelector('.sort-arrow').textContent = dir === 'asc' ? '▲' : '▼';
+}
+
+function initScheduleTable() {
+  const table = document.getElementById('schedule-table');
+  if (!table || !TODAY_JALALI) return;
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+
+  rows.forEach(row => {
+    const d = row.dataset.date || '';
+    if (d && d < TODAY_JALALI) {
+      row.classList.add('past-row');
+    }
+  });
+
+  // آینده/امروز بالا (صعودی)، گذشته پایین (نزولی، نزدیک‌ترینِ گذشته اول)
+  rows.sort((a, b) => {
+    const da = a.dataset.date || '';
+    const db = b.dataset.date || '';
+    const aPast = da && da < TODAY_JALALI;
+    const bPast = db && db < TODAY_JALALI;
+    if (aPast !== bPast) return aPast ? 1 : -1;
+    return aPast ? db.localeCompare(da) : da.localeCompare(db);
+  });
+
+  rows.forEach(row => tbody.appendChild(row));
+}
+
+/* ==== فهرست یکپارچه‌ی فروشگاه‌ها: انتخاب ستون و فیلتر «تعیین نشده» ==== */
+const DIR_LOCKED = ['کد فروشگاه', '{{ expert_column }}'];
+let dirColumns = [];
+
+function dirColumnData() {
+  return {{ directory_all_columns | tojson }}.map(c => ({key: c.key, label: c.label, hidden: !!c.hidden}));
+}
+
+function openDirColumns() {
+  dirColumns = dirColumnData();
+  const list = document.getElementById('colPickerList');
+  list.innerHTML = '';
+  dirColumns.forEach((c, i) => {
+    const locked = DIR_LOCKED.includes(c.key);
+    const label = document.createElement('label');
+    label.className = 'col-picker-item' + (locked ? ' locked' : '');
+    label.innerHTML = '<input type="checkbox" data-i="' + i + '"' +
+      (c.hidden ? '' : ' checked') + (locked ? ' disabled' : '') + '>' +
+      '<span>' + escapeHtml(c.label) + '</span>';
+    list.appendChild(label);
+  });
+  document.getElementById('colPickerStatus').textContent = dirColumns.length + ' ستون';
+  document.getElementById('colPickerOverlay').classList.add('active');
+}
+
+function closeDirColumns() {
+  document.getElementById('colPickerOverlay').classList.remove('active');
+}
+
+function selectAllDirColumns(showAll) {
+  document.querySelectorAll('#colPickerList input').forEach(box => {
+    if (box.disabled) { box.checked = true; return; }
+    box.checked = showAll;
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+async function saveDirColumns() {
+  const hidden = [];
+  dirColumns.forEach((c, i) => {
+    const box = document.querySelector('#colPickerList input[data-i="' + i + '"]');
+    if (!box || !box.checked) hidden.push(c.key);
+  });
+  const resp = await fetch('/api/store-list/columns', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({hidden: hidden})
+  });
+  const res = await resp.json();
+  if (!res.ok) { alert(res.message || 'خطا در ذخیره‌سازی.'); return; }
+  closeDirColumns();
+  location.reload();
+}
+
+let onlyUnassigned = false;
+function toggleOnlyUnassigned() {
+  onlyUnassigned = !onlyUnassigned;
+  const table = document.getElementById('directory');
+  if (!table) return;
+  const marker = '{{ expert_unset }}';
+  let visible = 0;
+  for (const row of table.tBodies[0].rows) {
+    let match = !onlyUnassigned || row.textContent.includes(marker);
+    if (onlyUnassigned && match) {
+      const q = (document.querySelector('#panel-directory input[type="text"]') || {}).value || '';
+      if (q.trim() && !row.textContent.toLowerCase().includes(q.trim().toLowerCase())) match = false;
+    }
+    row.style.display = match ? '' : 'none';
+    if (match) visible++;
+  }
+  const counter = document.getElementById('directory-count');
+  if (counter) counter.textContent = visible + ' ردیف نمایش داده می‌شه';
+}
+
+document.getElementById('colPickerOverlay')?.addEventListener('click', function (e) {
+  if (e.target === this) closeDirColumns();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeDirColumns();
+});
+
+/* ==== ویرایش گروهی کارشناس انفورماتیک ==== */
+let bulkPreview = null;
+
+function faDigits(v) {
+  return String(v == null ? '' : v).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+}
+
+function openBulkExpert() {
+  document.getElementById('bulkOverlay').classList.add('active');
+  document.getElementById('bulkPreview').style.display = 'none';
+  document.getElementById('bulkApplyBtn').disabled = true;
+  document.getElementById('bulkStatus').textContent = '';
+}
+
+function closeBulkExpert() {
+  document.getElementById('bulkOverlay').classList.remove('active');
+}
+
+function bulkPayload(extra) {
+  const fa = v => faDigits(v).replace(/[^0-9]/g, '');
+  return Object.assign({
+    code_from: fa(document.getElementById('bulkFrom').value),
+    code_to: fa(document.getElementById('bulkTo').value),
+    only_empty: document.getElementById('bulkOnlyEmpty').checked
+  }, extra || {});
+}
+
+async function postJSON(url, body) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  return await resp.json();
+}
+
+async function previewBulkExpert() {
+  const box = document.getElementById('bulkPreview');
+  const status = document.getElementById('bulkStatus');
+  box.style.display = 'none';
+  document.getElementById('bulkApplyBtn').disabled = true;
+  status.textContent = 'در حال بررسی...';
+  const body = bulkPayload({preview: true});
+  if (!body.code_from) { status.textContent = 'محدوده‌ی کد رو وارد کن.'; return; }
+  const res = await postJSON('/api/expert/bulk', body);
+  if (!res.ok) { status.textContent = res.message || 'خطا'; return; }
+  bulkPreview = body;
+  const willOverwrite = res.already_assigned > 0 && !body.only_empty;
+  const noSpace = !body.only_empty && res.already_assigned === 0 && res.matched > 0 && !res.added;
+  box.className = 'bulk-preview' + (willOverwrite ? ' warn' : '');
+  const total = res.matched + (res.added || 0);
+  let html = '<b>' + total + ' فروشگاه</b> توی این محدوده پیدا شد.';
+  if (body.only_empty) {
+    html += ' ' + res.matched + ' موردشون بدون کارشناسه و پر می‌شن.';
+  } else {
+    html += ' تخصیص فعلی ' + res.already_assigned + ' مورد بازنویسی می‌شه.';
+  }
+  if (res.added) {
+    html += '<br>' + res.added + ' فروشگاه این محدوده اصلاً ردیف کارشناس ندارن و به‌صورت سطر جدید اضافه می‌شن.';
+  }
+  if (res.matched) {
+    html += '<ul><li>نمونه کدها: ' + res.sample.map(c => faDigits(c)).join('، ') +
+            (res.matched > res.sample.length ? ' و…' : '') + '</li></ul>';
+  }
+  box.innerHTML = html;
+  box.style.display = 'block';
+  status.textContent = '';
+  document.getElementById('bulkApplyBtn').disabled = (res.matched + (res.added || 0)) === 0 || noSpace;
+}
+
+async function applyBulkExpert() {
+  const expert = document.getElementById('bulkExpert').value.trim();
+  const status = document.getElementById('bulkStatus');
+  if (!expert) { status.textContent = 'نام کارشناس رو وارد کن.'; return; }
+  if (!confirm('مطمئنی؟ این تغییر روی فایل اطلاعات ذخیره می‌شه.')) return;
+  const btn = document.getElementById('bulkApplyBtn');
+  btn.disabled = true;
+  status.textContent = 'در حال ذخیره...';
+  const res = await postJSON('/api/expert/bulk', bulkPayload({expert: expert}));
+  if (!res.ok) { status.textContent = res.message || 'خطا'; btn.disabled = false; return; }
+  if (!res.changed) { status.textContent = res.message || 'تغییری نشد.'; btn.disabled = false; return; }
+  location.reload();
+}
+
+document.getElementById('bulkOverlay')?.addEventListener('click', function (e) {
+  if (e.target === this) closeBulkExpert();
+});
+['bulkFrom', 'bulkTo', 'bulkOnlyEmpty'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', function () {
+    document.getElementById('bulkPreview').style.display = 'none';
+    document.getElementById('bulkApplyBtn').disabled = true;
+  });
+});
+
+/* ==== تب لیست کارشناسان ==== */
+function toggleExpertGroup(head) {
+  head.parentElement.classList.toggle('open');
+}
+
+function toggleAllExpertGroups(btn) {
+  const groups = document.querySelectorAll('#panel-experts .exp-group');
+  const anyClosed = [...groups].some(g => !g.classList.contains('open'));
+  groups.forEach(g => g.classList.toggle('open', anyClosed));
+  btn.textContent = anyClosed ? '▴ بستن همه' : '▾ باز/بستن همه';
+}
+
+function filterExpertGroups(q) {
+  q = (q || '').trim();
+  document.querySelectorAll('#panel-experts .exp-group').forEach(group => {
+    const name = (group.dataset.expert || '').toLowerCase();
+    let visible = !q || name.includes(q.toLowerCase());
+    if (!visible) {
+      // اگر جستجو نام یک کد یا فروشگاه بود، خود ردیف‌ها فیلتر شوند
+      group.querySelectorAll('tbody tr').forEach(tr => {
+        const hit = tr.textContent.toLowerCase().includes(q.toLowerCase());
+        tr.style.display = hit ? '' : 'none';
+        if (hit) visible = true;
+      });
+    } else {
+      group.querySelectorAll('tbody tr').forEach(tr => { tr.style.display = ''; });
+    }
+    group.style.display = visible ? '' : 'none';
+    if (q && visible) group.classList.add('open');
+  });
+}
+
+function markStoreExpertPending(sel) {
+  if (sel.dataset.prev === sel.value) { sel.classList.remove('dirty'); return; }
+  sel.classList.add('dirty');
+  refreshBulkBar();
+}
+
+function refreshBulkBar() {
+  const dirty = document.querySelectorAll('#panel-experts select[data-code].dirty');
+  const btn = document.getElementById('bulkSaveBtn');
+  const info = document.getElementById('bulkPending');
+  if (!btn || !info) return;
+  btn.disabled = dirty.length === 0;
+  btn.textContent = dirty.length ? `💾 ذخیره‌ی گروهی ${dirty.length} تغییر` : '💾 ذخیره‌ی گروهی تغییرات';
+  info.textContent = dirty.length
+    ? `${dirty.length} فروشگاه منتظر ذخیره است — تا وقتی «ذخیره‌ی گروهی» را نزنی چیزی اعمال نمی‌شود.`
+    : 'همه‌ی تغییرات ذخیره شده است.';
+}
+
+async function saveAllStoreExperts() {
+  const dirty = [...document.querySelectorAll('#panel-experts select[data-code].dirty')];
+  if (!dirty.length) return;
+  const changes = dirty.map(s => ({code: s.dataset.code, expert: s.value}));
+  const btn = document.getElementById('bulkSaveBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ در حال ذخیره...';
+  const res = await postJSON('/api/expert/bulk-store', {changes: changes});
+  if (!res.ok) {
+    btn.disabled = false;
+    refreshBulkBar();
+    alert(res.message || 'ذخیره انجام نشد');
+    return;
+  }
+  alert(res.message || 'ذخیره شد');
+  setTimeout(() => location.reload(), 600);
+}
+
+function refreshRegionBar() {
+  const dirty = document.querySelectorAll('#regionTable select[data-region].dirty');
+  const btn = document.getElementById('regionSaveBtn');
+  const info = document.getElementById('regionPending');
+  if (!btn || !info) return;
+  btn.disabled = dirty.length === 0;
+  btn.textContent = dirty.length ? `💾 ذخیره‌ی ${dirty.length} منطقه` : '💾 ذخیره‌ی کارشناس مناطق';
+  info.textContent = dirty.length
+    ? `${dirty.length} منطقه منتظر ذخیره است.`
+    : 'کارشناس مناطق ذخیره شده است.';
+}
+
+async function saveRegionExperts() {
+  const sels = [...document.querySelectorAll('#regionTable select[data-region]')];
+  const regions = {};
+  sels.forEach(s => { regions[s.dataset.region] = s.value; });
+  const btn = document.getElementById('regionSaveBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ در حال ذخیره...';
+  const res = await postJSON('/api/region-experts', {regions: regions});
+  if (!res.ok) {
+    refreshRegionBar();
+    alert(res.message || 'ذخیره انجام نشد');
+    return;
+  }
+  sels.forEach(s => { s.dataset.prev = s.value; s.classList.remove('dirty'); });
+  refreshRegionBar();
+  alert(res.message || 'ذخیره شد');
+}
+
+async function announcePreview(kind) {
+  const res = await postJSON('/api/announce/preview', {kind: kind});
+  if (!res.ok) { alert(res.message || 'خطا'); return; }
+  const box = document.getElementById('announceText');
+  document.getElementById('announceKind').value = kind;
+  box.value = res.text;
+  const modal = document.getElementById('announceModal');
+  modal.style.display = 'flex';
+}
+
+async function announceSend() {
+  const kind = document.getElementById('announceKind').value;
+  const box = document.getElementById('announceText');
+  if (!confirm('همین پیام برای گروه ارسال شود؟\n(پس از ارسال قابل ویرایش نیست)')) return;
+  const btn = document.getElementById('announceSendBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ در حال ارسال...';
+  const res = await postJSON('/api/announce/send', {kind: kind});
+  btn.disabled = false;
+  btn.textContent = '📤 ارسال به گروه';
+  if (!res.ok) { alert(res.message || 'ارسال نشد'); return; }
+  document.getElementById('announceModal').style.display = 'none';
+  box.value = '';
+  alert(res.message || 'ارسال شد');
+}
+
+function announceClose() {
+  document.getElementById('announceModal').style.display = 'none';
+}
+
+async function doRenameExpert(idx, current) {
+  const box = document.getElementById('rn-' + idx);
+  const name = (box?.value || '').trim();
+  if (!name) { alert('اسم جدید رو بنویس'); return; }
+  if (name === current) return;
+  const group = document.getElementById('panel-experts').querySelectorAll('.exp-group')[idx];
+  const count = group?.dataset.count || '؟';
+  if (!confirm('«' + current + '» رو به «' + name + '» تغییر بدی؟\nاین کار روی همه‌ی ' + count + ' فروشگاهش اعمال می‌شه.\n(بکاپ خودکار گرفته می‌شه)')) return;
+  const res = await postJSON('/api/expert/rename', {from: current, to: name});
+  if (!res.ok) { alert(res.message || 'خطا'); return; }
+  alert(res.message);
+  location.reload();
+}
+
+document.addEventListener('DOMContentLoaded', initScheduleTable);
+</script>
+<!-- ==== انتخاب ستون‌های فهرست فروشگاه‌ها ==== -->
+<div class="col-picker-overlay" id="colPickerOverlay">
+  <div class="col-picker">
+    <div class="col-picker-head">
+      <h3>⚙️ انتخاب ستون‌های فهرست فروشگاه‌ها</h3>
+      <button type="button" class="btn btn-sm" onclick="closeDirColumns()">✕ بستن</button>
+    </div>
+    <div class="col-picker-body">
+      <p class="hint" style="margin:0 0 12px;">
+        تیک ستون‌هایی که می‌خوای توی جدول باشه رو بزن. «کد فروشگاه» و «{{ expert_column }}»
+        همیشه نمایش داده می‌شن و قابل حذف نیستن.
+      </p>
+      <div class="col-picker-list" id="colPickerList"></div>
+    </div>
+    <div class="col-picker-foot">
+      <span class="hint" id="colPickerStatus"></span>
+      <button type="button" class="btn btn-sm" onclick="selectAllDirColumns(true)">✅ همه</button>
+      <button type="button" class="btn btn-sm" onclick="selectAllDirColumns(false)">➖ فقط ضروری‌ها</button>
+      <button type="button" class="btn btn-active" onclick="saveDirColumns()">💾 ذخیره انتخاب</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==== ویرایش گروهی کارشناس انفورماتیک ==== -->
+<div class="col-picker-overlay" id="announceModal">
+  <div class="col-picker">
+    <div class="col-picker-head">
+      <h3>👁️ پیش‌نمایش پیام اطلاع‌رسانی</h3>
+      <button type="button" class="btn btn-sm" onclick="announceClose()">✕ بستن</button>
+    </div>
+    <div class="col-picker-body">
+      <p class="hint" style="margin:0 0 12px;">
+        متن زیر را بخوان؛ اگر درست بود «ارسال به گروه» را بزن. متن از وضعیت فعلی
+        داده‌ها ساخته می‌شود و بعد از ارسال قابل ویرایش نیست.
+      </p>
+      <input type="hidden" id="announceKind" value="regions">
+      <textarea id="announceText" rows="16" readonly style="width:100%;font-family:inherit;font-size:.82rem;line-height:1.9;"></textarea>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+        <button type="button" class="btn btn-outline" onclick="announceClose()">بستن</button>
+        <button type="button" class="btn btn-active" id="announceSendBtn" onclick="announceSend()">📤 ارسال به گروه</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="col-picker-overlay" id="bulkOverlay">
+  <div class="col-picker">
+    <div class="col-picker-head">
+      <h3>✏️ ویرایش گروهی کارشناس انفورماتیک</h3>
+      <button type="button" class="btn btn-sm" onclick="closeBulkExpert()">✕ بستن</button>
+    </div>
+    <div class="col-picker-body">
+      <p class="hint" style="margin:0 0 14px;">
+        یه محدوده‌ی کد فروشگاه انتخاب کن و بگو کارشناسش کیه. مثلاً فقط <b>۳۵۰۰</b>
+        رو بذاری یعنی همه‌ی کدهای ۳۵۰۰ تا ۳۵۹۹. اول «پیش‌نمایش» رو بزن تا ببینی
+        چند فروشگاه و چه کسانی تغییر می‌کنن.
+      </p>
+      <div class="bulk-grid">
+        <div>
+          <label>از کد</label>
+          <input type="text" id="bulkFrom" placeholder="۳۵۰۰" inputmode="numeric">
+        </div>
+        <div>
+          <label>تا کد (خالی = همون پیشوند)</label>
+          <input type="text" id="bulkTo" placeholder="۳۵۹۹" inputmode="numeric">
+        </div>
+        <div class="full">
+          <label>کارشناس انفورماتیک</label>
+          <input type="text" id="bulkExpert" list="bulkExpertList" placeholder="مثلاً سجاد شکوری">
+          <datalist id="bulkExpertList">
+            {% for name in expert_names %}
+            <option value="{{ name }}"></option>
+            {% endfor %}
+          </datalist>
+          <div class="bulk-quick">
+            {% for name in expert_names %}
+            <button type="button" onclick="document.getElementById('bulkExpert').value='{{ name }}'">{{ name }}</button>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="full">
+          <label style="display:flex;align-items:center;gap:8px;color:var(--text);">
+            <input type="checkbox" id="bulkOnlyEmpty" checked style="width:auto;margin:0;">
+            فقط فروشگاه‌های بدون کارشناس را پر کن (تخصیص‌های موجود دست‌نخورده بمانند)
+          </label>
+        </div>
+      </div>
+      <div class="bulk-preview" id="bulkPreview" style="display:none;"></div>
+    </div>
+    <div class="col-picker-foot">
+      <span class="hint" id="bulkStatus"></span>
+      <button type="button" class="btn btn-sm" onclick="previewBulkExpert()">🔍 پیش‌نمایش</button>
+      <button type="button" class="btn btn-active" id="bulkApplyBtn" onclick="applyBulkExpert()" disabled>💾 اعمال</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

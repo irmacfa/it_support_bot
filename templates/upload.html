@@ -585,6 +585,12 @@ function input_keydown(box) {
   });
 }
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[ch]);
+}
+
 function renderFields(container, sheet) {
   const data = fieldsData[sheet];
   if (!data) return;
@@ -654,12 +660,12 @@ function renderFields(container, sheet) {
     item.innerHTML = [
       '<span class="field-handle">⠿</span>',
       '<div class="field-label-wrap">',
-      `<span class="field-label" id="label_${safeId}">${label}</span>`,
-      `<input class="field-label-input" id="input_${safeId}" value="${label.replace(/"/g, '&quot;')}" style="display:none">`,
+      `<span class="field-label" id="label_${safeId}">${escapeHtml(label)}</span>`,
+      `<input class="field-label-input" id="input_${safeId}" value="${escapeHtml(label)}" style="display:none">`,
       `<button class="btn-icon edit" id="edit_${safeId}" title="ویرایش">✏️</button>`,
       `<button class="btn-icon confirm" id="confirm_${safeId}" title="تایید" style="display:none">✅</button>`,
       '</div>',
-      `<span class="field-col-name">(${col})</span>`,
+      `<span class="field-col-name">(${escapeHtml(col)})</span>`,
       '<label class="field-toggle">',
       `<input type="checkbox" ${hiddenSet.has(col) ? '' : 'checked'}>`,
       '<span class="slider"></span>',

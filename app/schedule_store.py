@@ -50,6 +50,7 @@ def _save(value: dict[str, dict] | None = None) -> None:
 
 def reload_schedule() -> tuple[bool, str]:
     """فایل PDF ذخیره‌شده رو پارس می‌کنه و کش JSON رو می‌سازه."""
+    global _schedule
     if not PDF_PATH.exists():
         return False, "فایل PDF برنامه شیفت پیدا نشد."
 

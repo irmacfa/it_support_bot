@@ -44,8 +44,8 @@ def _load() -> None:
         _schedule = {}
 
 
-def _save() -> None:
-    atomic_write_json(JSON_PATH, _schedule)
+def _save(value: dict[str, dict] | None = None) -> None:
+    atomic_write_json(JSON_PATH, _schedule if value is None else value)
 
 
 def reload_schedule() -> tuple[bool, str]:
@@ -86,10 +86,13 @@ def reload_schedule() -> tuple[bool, str]:
     if not new_data:
         return False, "هیچ ردیف معتبری توی PDF پیدا نشد. فرمت فایل رو چک کن."
 
-    with _lock:
-        global _schedule
-        _schedule = new_data
-        _save()
+    try:
+        with _lock:
+            _save(new_data)
+            _schedule = new_data
+    except Exception:
+        log.exception("ذخیره‌ی برنامه‌ی شیفت ناموفق بود.")
+        return False, "ذخیره‌ی برنامه‌ی شیفت ناموفق بود؛ اطلاعات قبلی حفظ شد."
 
     return True, f"برنامه شیفت با موفقیت بارگذاری شد ({len(new_data)} روز)."
 
@@ -107,9 +110,11 @@ def update_day(
     """یه روز خاص از برنامه شیفت رو مستقیم ویرایش می‌کنه (مثلاً جابجایی دو نفر)، بدون نیاز به آپلود دوباره PDF."""
     with _lock:
         _load()
-        record = _schedule.get(date_str)
-        if record is None:
+        current = _schedule.get(date_str)
+        if current is None:
             return None
+        updated = {key: dict(value) for key, value in _schedule.items()}
+        record = dict(current)
         if desk1 is not None:
             record["desk1"] = desk1
         if desk2 is not None:
@@ -122,8 +127,10 @@ def update_day(
             record["morning_shift"] = morning_shift
         if evening_shift is not None:
             record["evening_shift"] = evening_shift
-        _save()
-        return record
+        updated[date_str] = record
+        _save(updated)
+        _schedule = updated
+        return dict(record)
 
 
 def lookup(date_str: str) -> dict | None:

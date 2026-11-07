@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, bale_bot, schedule_store, schedule_times, usage_stats
+from app.atomic_io import atomic_exchange_paths
 from app import xlsx_sheet, region_experts, dataset_router, presence, separated_experts
 
 app_logger = logging.getLogger("it_support_panel")
@@ -374,13 +375,19 @@ def _commit_store_files(staged: list[Path]) -> Path | None:
         for path in staged:
             shutil.move(str(path), str(incoming / _active_name(path)))
         if destination.exists():
-            os.replace(destination, previous)
-        try:
+            if atomic_exchange_paths(incoming, destination):
+                # The new directory is active and the old one now lives at incoming.
+                previous = incoming
+            else:
+                os.replace(destination, previous)
+                try:
+                    os.replace(incoming, destination)
+                except Exception:
+                    if previous.exists() and not destination.exists():
+                        os.replace(previous, destination)
+                    raise
+        else:
             os.replace(incoming, destination)
-        except Exception:
-            if previous.exists() and not destination.exists():
-                os.replace(previous, destination)
-            raise
         return previous if previous.exists() else None
     except Exception:
         shutil.rmtree(incoming, ignore_errors=True)

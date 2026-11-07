@@ -24,7 +24,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, bale_bot, schedule_store, schedule_times, usage_stats
-from app.atomic_io import atomic_write_text
 from app import xlsx_sheet, region_experts, dataset_router, presence, separated_experts
 
 app_logger = logging.getLogger("it_support_panel")
@@ -393,10 +392,16 @@ def _finish_store_commit(previous: Path | None, success: bool) -> None:
     destination = config.STORE_FILES_DIR
     if success:
         if previous:
-            shutil.rmtree(previous, ignore_errors=True)
+            if previous.is_dir():
+                shutil.rmtree(previous, ignore_errors=True)
+            else:
+                previous.unlink(missing_ok=True)
         return
     if destination.exists():
-        shutil.rmtree(destination, ignore_errors=True)
+        if destination.is_dir():
+            shutil.rmtree(destination, ignore_errors=True)
+        else:
+            destination.unlink(missing_ok=True)
     if previous and previous.exists():
         os.replace(previous, destination)
 
@@ -626,27 +631,30 @@ def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None
     destination = (config.INFO_EXCEL_PATH if base.suffix.lower() in data_store.EXCEL_SUFFIXES
                    else config.INFO_EXCEL_PATH.with_suffix(base.suffix.lower()))
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    previous = destination.with_name(f".{destination.name}.previous-{secrets.token_hex(8)}")
-    if destination.exists():
-        os.replace(destination, previous)
+    active_before = _active_info_path()
+    previous = active_before.with_name(f".{active_before.name}.previous-{secrets.token_hex(8)}")
+    had_previous = active_before.exists()
+    if had_previous:
+        os.replace(active_before, previous)
     try:
         os.replace(base, destination)
     except Exception:
-        if previous.exists() and not destination.exists():
-            os.replace(previous, destination)
+        if had_previous and previous.exists() and not active_before.exists():
+            os.replace(previous, active_before)
         raise
     config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
-    return destination, carried, (previous if previous.exists() else None)
+    return destination, carried, (previous if had_previous else None), (active_before if had_previous else None)
 
 
-def _finish_info_commit(destination: Path, previous: Path | None, success: bool) -> None:
+def _finish_info_commit(destination: Path, previous: Path | None,
+                        previous_original: Path | None, success: bool) -> None:
     if success:
         if previous:
             previous.unlink(missing_ok=True)
         return
     destination.unlink(missing_ok=True)
-    if previous and previous.exists():
-        os.replace(previous, destination)
+    if previous and previous.exists() and previous_original:
+        os.replace(previous, previous_original)
 
 
 def _apply_dataset(key: str, staged: list[Path], mode: str, drop_missing: bool) -> tuple[bool, str, dict]:
@@ -668,15 +676,15 @@ def _apply_dataset(key: str, staged: list[Path], mode: str, drop_missing: bool) 
             raise
 
     _make_info_backup()
-    destination, _carried, previous = _commit_info_files(staged)
+    destination, _carried, previous, previous_original = _commit_info_files(staged)
     try:
         result = mod.commit_upload([destination], mode, drop_missing)
-        _finish_info_commit(destination, previous, bool(result[0]))
+        _finish_info_commit(destination, previous, previous_original, bool(result[0]))
         if not result[0]:
             mod.reload_info()
         return result
     except Exception:
-        _finish_info_commit(destination, previous, False)
+        _finish_info_commit(destination, previous, previous_original, False)
         mod.reload_info()
         raise
 

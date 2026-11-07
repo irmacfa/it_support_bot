@@ -375,27 +375,55 @@ def _clean_staging(max_age_hours: int = 6) -> None:
             shutil.rmtree(folder, ignore_errors=True)
 
 
+MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
 async def _stage_uploads(files: list[UploadFile], mode: str, drop_missing: bool) -> Path:
-    """فایل‌های آپلودی رو توی یه پوشه‌ی موقت می‌ذاره تا بعد از تأیید کاربر اعمال بشن."""
+    """فایل‌ها را با سقف حجم و به‌صورت chunk در پوشه‌ی موقت ذخیره می‌کند."""
     _clean_staging()
     config.UPLOAD_STAGING_DIR.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(12)
     folder = config.UPLOAD_STAGING_DIR / token
     folder.mkdir(parents=True, exist_ok=True)
-    for i, upload in enumerate(files):
-        name = _safe_filename(upload.filename)
-        if Path(name).suffix.lower() not in data_store.SUPPORTED_SUFFIXES:
-            continue
-        sub_dir = folder / str(i)
-        sub_dir.mkdir(parents=True, exist_ok=True)
-        with open(sub_dir / name, "wb") as f:
-            f.write(await upload.read())
-    (folder / "_upload.json").write_text(
-        json.dumps({"mode": mode, "drop_missing": drop_missing, "at": datetime.now().isoformat(timespec="seconds")},
-                   ensure_ascii=False),
-        encoding="utf-8",
-    )
-    return folder
+    total_bytes = 0
+    try:
+        for i, upload in enumerate(files):
+            name = _safe_filename(upload.filename)
+            if Path(name).suffix.lower() not in data_store.SUPPORTED_SUFFIXES:
+                continue
+            sub_dir = folder / str(i)
+            sub_dir.mkdir(parents=True, exist_ok=True)
+            file_bytes = 0
+            with open(sub_dir / name, "wb") as target:
+                while True:
+                    chunk = await upload.read(UPLOAD_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    file_bytes += len(chunk)
+                    total_bytes += len(chunk)
+                    if file_bytes > MAX_UPLOAD_FILE_BYTES:
+                        raise ValueError(f"حجم فایل «{name}» از سقف ۱۰۰ مگابایت بیشتر است.")
+                    if total_bytes > MAX_UPLOAD_TOTAL_BYTES:
+                        raise ValueError("حجم مجموع فایل‌های این درخواست از سقف ۲۰۰ مگابایت بیشتر است.")
+                    target.write(chunk)
+            await upload.close()
+        (folder / "_upload.json").write_text(
+            json.dumps({"mode": mode, "drop_missing": drop_missing,
+                        "at": datetime.now().isoformat(timespec="seconds")},
+                       ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return folder
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        for upload in files:
+            try:
+                await upload.close()
+            except Exception:
+                pass
+        raise
 
 
 def _staged_paths(folder: Path) -> list[Path]:
@@ -607,7 +635,20 @@ async def upload_file(request: Request,
                                         "success": False}),
         )
 
-    folder = await _stage_uploads(chosen, mode, drop)
+    try:
+        folder = await _stage_uploads(chosen, mode, drop)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "upload.html",
+            _upload_ctx(request, flash={"message": str(exc), "success": False}),
+        )
+    except Exception:
+        app_logger.exception("ذخیره‌ی موقت فایل آپلودشده ناموفق بود.")
+        return templates.TemplateResponse(
+            "upload.html",
+            _upload_ctx(request, flash={"message": "ذخیره‌ی فایل آپلودشده ناموفق بود؛ فایل‌های قبلی تغییری نکردند.",
+                                        "success": False}),
+        )
     staged = _staged_paths(folder)
     if not staged:
         shutil.rmtree(folder, ignore_errors=True)

@@ -45,6 +45,7 @@ def get_all() -> dict[str, str]:
 
 def set_many(pairs: dict[str, str]) -> dict:
     """نگاشت منطقه→کارشناس را ذخیره می‌کند. مقدار خالی یعنی «تعیین نشده»."""
+    global _map
     cleaned = {str(k).strip(): str(v).strip()
                for k, v in (pairs or {}).items() if str(k).strip()}
     with _lock:

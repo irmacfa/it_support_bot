@@ -1689,7 +1689,8 @@ def _get_schedule_target_chat_id():
     for g in all_groups:
         if SCHEDULE_GROUP_TITLE_HINT in (g.get("title") or ""):
             return g["chat_id"]
-    return all_groups[0]["chat_id"]
+    # Fail closed: never send schedule details to an arbitrary first-seen group.
+    return None
 
 
 def _maybe_send_schedule_announcement() -> None:

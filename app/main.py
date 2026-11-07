@@ -617,7 +617,7 @@ def _make_info_backup(protect: str = "") -> str | None:
     return stamp
 
 
-def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None]:
+def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None, Path | None]:
     """Prepare the incoming workbook and atomically replace the active file."""
     base = staged[0]
     # اگر چند فایل اطلاعاتی از یک آپلود بیرون آمده بود، شیت‌هایشان را روی هم جمع می‌کنیم.

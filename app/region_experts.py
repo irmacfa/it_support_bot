@@ -9,6 +9,7 @@
 import json
 import threading
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 STORE_PATH = config.DATA_DIR / "region_experts.json"
@@ -32,10 +33,8 @@ def _load() -> None:
             _map = {}
 
 
-def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(_map, f, ensure_ascii=False, indent=2)
+def _save(value: dict[str, str] | None = None) -> None:
+    atomic_write_json(STORE_PATH, _map if value is None else value)
 
 
 def get_all() -> dict[str, str]:
@@ -46,17 +45,20 @@ def get_all() -> dict[str, str]:
 
 def set_many(pairs: dict[str, str]) -> dict:
     """نگاشت منطقه→کارشناس را ذخیره می‌کند. مقدار خالی یعنی «تعیین نشده»."""
+    global _map
     cleaned = {str(k).strip(): str(v).strip()
                for k, v in (pairs or {}).items() if str(k).strip()}
     with _lock:
         _load()
+        updated = dict(_map)
         changed = 0
         for region, expert in cleaned.items():
-            if _map.get(region, "") != expert:
+            if updated.get(region, "") != expert:
                 changed += 1
-            _map[region] = expert
-        _save()
-    return {"changed": changed, "total": len(_map)}
+            updated[region] = expert
+        _save(updated)
+        _map = updated
+    return {"changed": changed, "total": len(updated)}
 
 
 def regions() -> list[dict]:

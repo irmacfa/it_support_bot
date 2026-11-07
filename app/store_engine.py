@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app import config
+from app.atomic_io import atomic_write_json
 
 # `data_store` این موتور را در انتهای فایلش import می‌کند، پس اگر اینجا
 # مستقیم از آن چیزی import کنیم دورِ حلقه‌ای می‌سازیم که به ترتیب import وابسته
@@ -199,28 +200,19 @@ class Engine:
     # ------------------------------------------------------------ اسنپ‌شات
 
     def _write_schema(self, report: dict) -> None:
-        try:
-            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-            with open(self.profile.schema_path, "w", encoding="utf-8") as f:
-                json.dump(report, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        """Persist the schema or raise; silently losing it would hide a failed apply."""
+        atomic_write_json(self.profile.schema_path, report)
 
     def _write_snapshot(self, index: dict, report: dict) -> None:
-        """وضعیت «اعمال‌شده» تا با ری‌استارت سرویس رکوردهای ادغامی از بین نروند."""
-        try:
-            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-            payload = {
-                "version": self._snapshot_version(),
-                "at": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
-                "files": [list(sig) for sig in self.files_signature(self.profile.source_files())],
-                "index": index,
-                "schema": report,
-            }
-            with open(self.profile.snapshot_path, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False)
-        except Exception:
-            pass
+        """Persist the applied state before publishing it to the in-memory cache."""
+        payload = {
+            "version": self._snapshot_version(),
+            "at": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
+            "files": [list(sig) for sig in self.files_signature(self.profile.source_files())],
+            "index": index,
+            "schema": report,
+        }
+        atomic_write_json(self.profile.snapshot_path, payload, indent=None)
 
     def _read_snapshot(self, paths: list[Path]) -> dict | None:
         if not self.profile.snapshot_path.exists():
@@ -240,15 +232,16 @@ class Engine:
         return payload
 
     def apply_index(self, index: dict, report: dict, write_snapshot: bool = True) -> None:
+        # Persist first. If either write fails, retain the previous in-memory index.
+        if write_snapshot:
+            self._write_snapshot(index, report)
+        self._write_schema(report)
         with self._lock:
             self._index = index
             self._alias = self._build_alias(index) if self.profile.use_alias else {}
             self._schema = report
             self._last_error = report.get("errors")[0] if report.get("errors") else None
             self._signature = self.files_signature(self.profile.source_files())
-        self._write_schema(report)
-        if write_snapshot:
-            self._write_snapshot(index, report)
 
     # ------------------------------------------------------------ reload
 
@@ -261,7 +254,11 @@ class Engine:
 
         snapshot = self._read_snapshot(paths)
         if snapshot:
-            self.apply_index(snapshot["index"], snapshot["schema"], write_snapshot=False)
+            try:
+                self.apply_index(snapshot["index"], snapshot["schema"], write_snapshot=False)
+            except Exception:
+                self._last_error = "ذخیره‌ی گزارش ناموفق بود؛ ایندکس قبلی حفظ شد."
+                return False, self._last_error
             return True, self.report_summary(snapshot["schema"])
 
         index, report = self.build_from_paths(paths)
@@ -269,7 +266,11 @@ class Engine:
             self._last_error = self.report_summary(report)
             return False, self._last_error
 
-        self.apply_index(index, report)
+        try:
+            self.apply_index(index, report)
+        except Exception:
+            self._last_error = "ذخیره‌ی وضعیت ناموفق بود؛ ایندکس قبلی حفظ شد."
+            return False, self._last_error
         return True, self.report_summary(report)
 
     def auto_reload(self, force: bool = False) -> None:

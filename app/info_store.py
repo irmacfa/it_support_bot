@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app import config
+from app.atomic_io import atomic_write_json
 from app import data_store
 from app import separated_experts
 from app.xlsx_sheet import trim_float_noise
@@ -387,9 +388,7 @@ def save_directory_columns(hidden: list[str] | None) -> None:
     """ذخیره‌ی انتخاب ستون‌های فهرست فروشگاه‌ها (از پنل)."""
     cfg = _load_fields_config()
     cfg["store_list"] = {"hidden": [str(c) for c in (hidden or [])]}
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(FIELDS_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    atomic_write_json(FIELDS_CONFIG_PATH, cfg)
 
 
 def get_directory_rows() -> tuple[list[dict], list[dict]]:
@@ -859,9 +858,7 @@ def save_sheet_display(values: dict[str, dict]) -> None:
         else:
             saved[sheet] = entry
     cfg["info_sheets"] = saved
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(FIELDS_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    atomic_write_json(FIELDS_CONFIG_PATH, cfg)
 
 
 def format_info_reply(code: str, records: dict | list[dict] | None) -> str:

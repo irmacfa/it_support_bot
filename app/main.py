@@ -4,6 +4,7 @@
 احراز هویت: یه بار رمز عبور وارد میشه، بعدش با کوکی سشن همه‌ی بخش‌ها در دسترسن.
 """
 import json
+import os
 import logging
 import re
 import secrets
@@ -12,6 +13,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import jdatetime
 
@@ -22,11 +24,20 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, bale_bot, schedule_store, schedule_times, usage_stats
+from app.atomic_io import atomic_exchange_paths
 from app import xlsx_sheet, region_experts, dataset_router, presence, separated_experts
 
 app_logger = logging.getLogger("it_support_panel")
 
-app = FastAPI(title="IT Support Lookup Bot - Admin Panel")
+if not config.ADMIN_PASSWORD or config.ADMIN_PASSWORD.strip() in {"changeme", "change_this_password"}:
+    raise RuntimeError("ADMIN_PASSWORD must be configured in the .env file before starting the admin panel.")
+
+app = FastAPI(
+    title="IT Support Lookup Bot - Admin Panel",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 # صفحه‌ی /data چند مگابایت HTML برمی‌گردونه؛ بدون فشرده‌سازی، بارگذاریش کند می‌شه.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
@@ -60,6 +71,77 @@ def _is_authed(request: Request) -> bool:
     return True
 
 
+# محدودسازی تلاش‌های ناموفق ورود؛ پنل با یک Worker اجرا می‌شود.
+LOGIN_RATE_LIMIT = 5
+LOGIN_RATE_WINDOW_SECONDS = 15 * 60
+_login_failures: dict[str, list[float]] = {}
+_login_rate_lock = threading.Lock()
+
+
+def _login_client_key(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _login_retry_after(client_key: str) -> int:
+    now = time.monotonic()
+    with _login_rate_lock:
+        attempts = [t for t in _login_failures.get(client_key, [])
+                    if now - t < LOGIN_RATE_WINDOW_SECONDS]
+        if attempts:
+            _login_failures[client_key] = attempts
+        else:
+            _login_failures.pop(client_key, None)
+        if len(attempts) < LOGIN_RATE_LIMIT:
+            return 0
+        return max(1, int(LOGIN_RATE_WINDOW_SECONDS - (now - attempts[0])))
+
+
+def _record_login_failure(client_key: str) -> None:
+    now = time.monotonic()
+    with _login_rate_lock:
+        # پاک‌سازی کلیدهای منقضی برای جلوگیری از رشد بی‌نهایت حافظه.
+        for key, values in list(_login_failures.items()):
+            active = [t for t in values if now - t < LOGIN_RATE_WINDOW_SECONDS]
+            if active:
+                _login_failures[key] = active
+            else:
+                _login_failures.pop(key, None)
+        _login_failures.setdefault(client_key, []).append(now)
+
+
+def _clear_login_failures(client_key: str) -> None:
+    with _login_rate_lock:
+        _login_failures.pop(client_key, None)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """محافظت مرکزی API و بررسی مبدأ درخواست‌های تغییردهنده."""
+    if request.url.path.startswith("/api/") and not _is_authed(request):
+        return JSONResponse(
+            {"ok": False, "error": "احراز هویت لازم است."},
+            status_code=401,
+        )
+
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        source = origin or referer
+        host = request.headers.get("host", "").casefold()
+        try:
+            parsed = urlsplit(source) if source else None
+        except ValueError:
+            parsed = None
+        if (not parsed or parsed.scheme != request.url.scheme
+                or parsed.netloc.casefold() != host):
+            return JSONResponse(
+                {"ok": False, "error": "مبدأ درخواست معتبر نیست."},
+                status_code=403,
+            )
+
+    return await call_next(request)
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     if _is_authed(request):
@@ -69,10 +151,24 @@ def login_page(request: Request):
 
 @app.post("/login", response_class=HTMLResponse)
 def login_submit(request: Request, password: str = Form(...)):
+    client_key = _login_client_key(request)
+    retry_after = _login_retry_after(client_key)
+    if retry_after:
+        response = templates.TemplateResponse(
+            "login.html",
+            {"request": request, "message": "تعداد تلاش‌های ورود زیاد است؛ کمی بعد دوباره امتحان کنید."},
+            status_code=429,
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        return response
+
     if password != config.ADMIN_PASSWORD:
+        _record_login_failure(client_key)
         return templates.TemplateResponse(
             "login.html", {"request": request, "message": "رمز عبور اشتباهه."}
         )
+
+    _clear_login_failures(client_key)
     token = _create_session()
     resp = RedirectResponse("/dashboard", status_code=302)
     resp.set_cookie(
@@ -249,8 +345,10 @@ def _make_backup(protect: str = "") -> str | None:
         target.mkdir(parents=True, exist_ok=True)
         for path in files:
             shutil.copy2(path, target / path.name)
-    except Exception as e:
-        return None
+    except Exception as exc:
+        shutil.rmtree(target, ignore_errors=True)
+        app_logger.exception("ساخت نسخه‌ی پشتیبان فایل‌های شارژ ناموفق بود.")
+        raise RuntimeError("ساخت نسخه‌ی پشتیبان فایل‌های شارژ ناموفق بود؛ هیچ فایلی تغییر نکرد.") from exc
 
     backups = sorted((d for d in config.STORE_BACKUP_DIR.iterdir() if d.is_dir()), reverse=True)
     for index, old in enumerate(backups):
@@ -260,14 +358,59 @@ def _make_backup(protect: str = "") -> str | None:
     return stamp
 
 
-def _commit_store_files(staged: list[Path]) -> None:
-    """فایل‌های تأییدشده رو جایگزین فایل‌های فعال می‌کنه."""
-    config.STORE_FILES_DIR.mkdir(parents=True, exist_ok=True)
-    for old in config.STORE_FILES_DIR.iterdir():
-        if old.is_file():
-            old.unlink()
-    for path in staged:
-        shutil.move(str(path), str(config.STORE_FILES_DIR / _active_name(path)))
+def _commit_store_files(staged: list[Path]) -> Path | None:
+    """Build a complete replacement directory, then swap it into place."""
+    destination = config.STORE_FILES_DIR
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(8)
+    incoming = destination.with_name(f".{destination.name}.incoming-{token}")
+    previous = destination.with_name(f".{destination.name}.previous-{token}")
+    incoming.mkdir()
+    try:
+        # Preserve existing subdirectories, matching the previous behavior.
+        if destination.is_dir():
+            for child in destination.iterdir():
+                if child.is_dir():
+                    shutil.copytree(child, incoming / child.name)
+        for path in staged:
+            shutil.move(str(path), str(incoming / _active_name(path)))
+        if destination.exists():
+            if atomic_exchange_paths(incoming, destination):
+                # The new directory is active and the old one now lives at incoming.
+                previous = incoming
+            else:
+                os.replace(destination, previous)
+                try:
+                    os.replace(incoming, destination)
+                except Exception:
+                    if previous.exists() and not destination.exists():
+                        os.replace(previous, destination)
+                    raise
+        else:
+            os.replace(incoming, destination)
+        return previous if previous.exists() else None
+    except Exception:
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise
+
+
+def _finish_store_commit(previous: Path | None, success: bool) -> None:
+    """Discard the old directory only after the index and snapshots are committed."""
+    destination = config.STORE_FILES_DIR
+    if success:
+        if previous:
+            if previous.is_dir():
+                shutil.rmtree(previous, ignore_errors=True)
+            else:
+                previous.unlink(missing_ok=True)
+        return
+    if destination.exists():
+        if destination.is_dir():
+            shutil.rmtree(destination, ignore_errors=True)
+        else:
+            destination.unlink(missing_ok=True)
+    if previous and previous.exists():
+        os.replace(previous, destination)
 
 
 def _clean_staging(max_age_hours: int = 6) -> None:
@@ -281,27 +424,55 @@ def _clean_staging(max_age_hours: int = 6) -> None:
             shutil.rmtree(folder, ignore_errors=True)
 
 
+MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 200 * 1024 * 1024
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
 async def _stage_uploads(files: list[UploadFile], mode: str, drop_missing: bool) -> Path:
-    """فایل‌های آپلودی رو توی یه پوشه‌ی موقت می‌ذاره تا بعد از تأیید کاربر اعمال بشن."""
+    """فایل‌ها را با سقف حجم و به‌صورت chunk در پوشه‌ی موقت ذخیره می‌کند."""
     _clean_staging()
     config.UPLOAD_STAGING_DIR.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(12)
     folder = config.UPLOAD_STAGING_DIR / token
     folder.mkdir(parents=True, exist_ok=True)
-    for i, upload in enumerate(files):
-        name = _safe_filename(upload.filename)
-        if Path(name).suffix.lower() not in data_store.SUPPORTED_SUFFIXES:
-            continue
-        sub_dir = folder / str(i)
-        sub_dir.mkdir(parents=True, exist_ok=True)
-        with open(sub_dir / name, "wb") as f:
-            f.write(await upload.read())
-    (folder / "_upload.json").write_text(
-        json.dumps({"mode": mode, "drop_missing": drop_missing, "at": datetime.now().isoformat(timespec="seconds")},
-                   ensure_ascii=False),
-        encoding="utf-8",
-    )
-    return folder
+    total_bytes = 0
+    try:
+        for i, upload in enumerate(files):
+            name = _safe_filename(upload.filename)
+            if Path(name).suffix.lower() not in data_store.SUPPORTED_SUFFIXES:
+                continue
+            sub_dir = folder / str(i)
+            sub_dir.mkdir(parents=True, exist_ok=True)
+            file_bytes = 0
+            with open(sub_dir / name, "wb") as target:
+                while True:
+                    chunk = await upload.read(UPLOAD_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    file_bytes += len(chunk)
+                    total_bytes += len(chunk)
+                    if file_bytes > MAX_UPLOAD_FILE_BYTES:
+                        raise ValueError(f"حجم فایل «{name}» از سقف ۱۰۰ مگابایت بیشتر است.")
+                    if total_bytes > MAX_UPLOAD_TOTAL_BYTES:
+                        raise ValueError("حجم مجموع فایل‌های این درخواست از سقف ۲۰۰ مگابایت بیشتر است.")
+                    target.write(chunk)
+            await upload.close()
+        (folder / "_upload.json").write_text(
+            json.dumps({"mode": mode, "drop_missing": drop_missing,
+                        "at": datetime.now().isoformat(timespec="seconds")},
+                       ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return folder
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        for upload in files:
+            try:
+                await upload.close()
+            except Exception:
+                pass
+        raise
 
 
 def _staged_paths(folder: Path) -> list[Path]:
@@ -420,14 +591,21 @@ def _make_info_backup(protect: str = "") -> str | None:
     قبل از هر تغییری) و هیچ‌وقت پاک نمی‌شن. `protect` اسم نسخه‌ایه که داره
     بازگردانی می‌شه تا موقع پاک‌سازی حذف نشه.
     """
-    if not config.INFO_EXCEL_PATH.exists():
+    source = _active_info_path()
+    if not source.exists():
         return None
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_path = config.INFO_BACKUP_DIR / f"{stamp}{source.suffix.lower()}"
     try:
         config.INFO_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(config.INFO_EXCEL_PATH, config.INFO_BACKUP_DIR / f"{stamp}.xlsx")
-    except Exception:
-        return None
+        shutil.copy2(source, backup_path)
+    except Exception as exc:
+        try:
+            backup_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        app_logger.exception("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود.")
+        raise RuntimeError("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود؛ هیچ فایلی تغییر نکرد.") from exc
 
     backups = sorted((p for p in config.INFO_BACKUP_DIR.iterdir()
                       if p.is_file() and not p.name.startswith("baseline-")),
@@ -439,9 +617,8 @@ def _make_info_backup(protect: str = "") -> str | None:
     return stamp
 
 
-def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str]]:
-    """فایل(های) اطلاعاتِ تأییدشده را به فایل فعال تبدیل می‌کند."""
-    _make_info_backup()
+def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None, Path | None]:
+    """Prepare the incoming workbook and atomically replace the active file."""
     base = staged[0]
     # اگر چند فایل اطلاعاتی از یک آپلود بیرون آمده بود، شیت‌هایشان را روی هم جمع می‌کنیم.
     for extra in staged[1:]:
@@ -461,23 +638,72 @@ def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str]]:
     destination = (config.INFO_EXCEL_PATH if base.suffix.lower() in data_store.EXCEL_SUFFIXES
                    else config.INFO_EXCEL_PATH.with_suffix(base.suffix.lower()))
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    destination.unlink(missing_ok=True)
-    shutil.move(str(base), str(destination))
+    # Invalidate the old snapshot before changing the source file; if invalidation
+    # fails, the currently active workbook is still untouched.
     config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
-    return destination, carried
+    active_before = _active_info_path()
+    previous = active_before.with_name(f".{active_before.name}.previous-{secrets.token_hex(8)}")
+    had_previous = active_before.exists()
+    if had_previous:
+        # Keep the old source readable until the new file has been atomically installed.
+        shutil.copy2(active_before, previous)
+    try:
+        os.replace(base, destination)
+        if had_previous and active_before != destination:
+            active_before.unlink()
+    except Exception:
+        if destination.exists() and destination != active_before:
+            destination.unlink(missing_ok=True)
+        if had_previous and previous.exists():
+            if not active_before.exists():
+                os.replace(previous, active_before)
+            else:
+                previous.unlink(missing_ok=True)
+        raise
+    return destination, carried, (previous if had_previous else None), (active_before if had_previous else None)
+
+
+def _finish_info_commit(destination: Path, previous: Path | None,
+                        previous_original: Path | None, success: bool) -> None:
+    if success:
+        if previous:
+            previous.unlink(missing_ok=True)
+        return
+    destination.unlink(missing_ok=True)
+    if previous and previous.exists() and previous_original:
+        os.replace(previous, previous_original)
 
 
 def _apply_dataset(key: str, staged: list[Path], mode: str, drop_missing: bool) -> tuple[bool, str, dict]:
-    """فایل‌های فیزیکی را جایگزین می‌کند و سپس موتور همان مجموعه‌داده را اجرا می‌کند."""
+    """Replace source files transactionally with the matching in-memory index."""
     mod = _engine_for(key)
     if key == "charge":
         _make_backup()
-        _commit_store_files(staged)
+        previous = _commit_store_files(staged)
         active = [config.STORE_FILES_DIR / _active_name(p) for p in staged]
-    else:
-        destination, _ = _commit_info_files(staged)
-        active = [destination]
-    return mod.commit_upload(active, mode, drop_missing)
+        try:
+            result = mod.commit_upload(active, mode, drop_missing)
+            _finish_store_commit(previous, bool(result[0]))
+            if not result[0]:
+                mod.reload_data()
+            return result
+        except Exception:
+            _finish_store_commit(previous, False)
+            mod.reload_data()
+            raise
+
+    _make_info_backup()
+    destination, _carried, previous, previous_original = _commit_info_files(staged)
+    try:
+        result = mod.commit_upload([destination], mode, drop_missing)
+        _finish_info_commit(destination, previous, previous_original, bool(result[0]))
+        if not result[0]:
+            mod.reload_info()
+        return result
+    except Exception:
+        _finish_info_commit(destination, previous, previous_original, False)
+        mod.reload_info()
+        raise
 
 
 @app.post("/upload", response_class=HTMLResponse)
@@ -513,7 +739,20 @@ async def upload_file(request: Request,
                                         "success": False}),
         )
 
-    folder = await _stage_uploads(chosen, mode, drop)
+    try:
+        folder = await _stage_uploads(chosen, mode, drop)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "upload.html",
+            _upload_ctx(request, flash={"message": str(exc), "success": False}),
+        )
+    except Exception:
+        app_logger.exception("ذخیره‌ی موقت فایل آپلودشده ناموفق بود.")
+        return templates.TemplateResponse(
+            "upload.html",
+            _upload_ctx(request, flash={"message": "ذخیره‌ی فایل آپلودشده ناموفق بود؛ فایل‌های قبلی تغییری نکردند.",
+                                        "success": False}),
+        )
     staged = _staged_paths(folder)
     if not staged:
         shutil.rmtree(folder, ignore_errors=True)
@@ -1608,8 +1847,12 @@ def usage_send(request: Request, chat_id: str = Form(...)):
     active_users, inactive_users, admins, top_admin_id, reset_admins_list, top_reset_admin_id = _build_usage_data()
 
     text = bale_bot.format_usage_report(active_users, inactive_users, admins, top_admin_id, reset_admins_list, top_reset_admin_id)
-    msg_id = bale_bot.send_message(int(chat_id), text)
-    message = "✅ گزارش به گروه ارسال شد." if msg_id is not None else "❌ ارسال گزارش ناموفق بود."
+    target = next((g for g in groups.list_all() if str(g.get("chat_id")) == str(chat_id)), None)
+    if target is None:
+        message = "❌ گروه انتخاب‌شده در فهرست گروه‌های شناخته‌شده نیست."
+    else:
+        msg_id = bale_bot.send_message(target["chat_id"], text)
+        message = "✅ گزارش به گروه ارسال شد." if msg_id is not None else "❌ ارسال گزارش ناموفق بود."
 
     from_date, to_date = _default_week_range()
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
@@ -2188,10 +2431,13 @@ def broadcast_send(request: Request, chat_id: str = Form(...), text: str = Form(
         return RedirectResponse("/login", status_code=302)
 
     text = text.strip()
+    target = next((g for g in groups.list_all() if str(g.get("chat_id")) == str(chat_id)), None)
     if not text:
         message = "❌ متن پیام نمی‌تونه خالی باشه."
+    elif target is None:
+        message = "❌ گروه انتخاب‌شده در فهرست گروه‌های شناخته‌شده نیست."
     else:
-        msg_id = bale_bot.send_message(int(chat_id), text)
+        msg_id = bale_bot.send_message(target["chat_id"], text)
         message = "✅ پیام به گروه ارسال شد." if msg_id is not None else "❌ ارسال پیام ناموفق بود."
 
     return templates.TemplateResponse(

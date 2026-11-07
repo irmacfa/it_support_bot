@@ -10,6 +10,7 @@ import threading
 import pdfplumber
 
 from app import config
+from app.atomic_io import atomic_write_json
 
 log = logging.getLogger("schedule_store")
 
@@ -44,9 +45,7 @@ def _load() -> None:
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(_schedule, f, ensure_ascii=False, indent=2)
+    atomic_write_json(JSON_PATH, _schedule)
 
 
 def reload_schedule() -> tuple[bool, str]:

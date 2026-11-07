@@ -33,8 +33,8 @@ def _load() -> None:
             _map = {}
 
 
-def _save() -> None:
-    atomic_write_json(STORE_PATH, _map)
+def _save(value: dict[str, str] | None = None) -> None:
+    atomic_write_json(STORE_PATH, _map if value is None else value)
 
 
 def get_all() -> dict[str, str]:
@@ -49,13 +49,15 @@ def set_many(pairs: dict[str, str]) -> dict:
                for k, v in (pairs or {}).items() if str(k).strip()}
     with _lock:
         _load()
+        updated = dict(_map)
         changed = 0
         for region, expert in cleaned.items():
-            if _map.get(region, "") != expert:
+            if updated.get(region, "") != expert:
                 changed += 1
-            _map[region] = expert
-        _save()
-    return {"changed": changed, "total": len(_map)}
+            updated[region] = expert
+        _save(updated)
+        _map = updated
+    return {"changed": changed, "total": len(updated)}
 
 
 def regions() -> list[dict]:

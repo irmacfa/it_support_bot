@@ -645,12 +645,20 @@ def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None
     previous = active_before.with_name(f".{active_before.name}.previous-{secrets.token_hex(8)}")
     had_previous = active_before.exists()
     if had_previous:
-        os.replace(active_before, previous)
+        # Keep the old source readable until the new file has been atomically installed.
+        shutil.copy2(active_before, previous)
     try:
         os.replace(base, destination)
+        if had_previous and active_before != destination:
+            active_before.unlink()
     except Exception:
-        if had_previous and previous.exists() and not active_before.exists():
-            os.replace(previous, active_before)
+        if destination.exists() and destination != active_before:
+            destination.unlink(missing_ok=True)
+        if had_previous and previous.exists():
+            if not active_before.exists():
+                os.replace(previous, active_before)
+            else:
+                previous.unlink(missing_ok=True)
         raise
     return destination, carried, (previous if had_previous else None), (active_before if had_previous else None)
 

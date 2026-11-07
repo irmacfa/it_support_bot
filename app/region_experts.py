@@ -9,6 +9,7 @@
 import json
 import threading
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 STORE_PATH = config.DATA_DIR / "region_experts.json"
@@ -33,9 +34,7 @@ def _load() -> None:
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(_map, f, ensure_ascii=False, indent=2)
+    atomic_write_json(STORE_PATH, _map)
 
 
 def get_all() -> dict[str, str]:

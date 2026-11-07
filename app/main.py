@@ -4,6 +4,7 @@
 احراز هویت: یه بار رمز عبور وارد میشه، بعدش با کوکی سشن همه‌ی بخش‌ها در دسترسن.
 """
 import json
+import os
 import logging
 import re
 import secrets
@@ -23,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, bale_bot, schedule_store, schedule_times, usage_stats
+from app.atomic_io import atomic_write_text
 from app import xlsx_sheet, region_experts, dataset_router, presence, separated_experts
 
 app_logger = logging.getLogger("it_support_panel")
@@ -356,14 +358,47 @@ def _make_backup(protect: str = "") -> str | None:
     return stamp
 
 
-def _commit_store_files(staged: list[Path]) -> None:
-    """فایل‌های تأییدشده رو جایگزین فایل‌های فعال می‌کنه."""
-    config.STORE_FILES_DIR.mkdir(parents=True, exist_ok=True)
-    for old in config.STORE_FILES_DIR.iterdir():
-        if old.is_file():
-            old.unlink()
-    for path in staged:
-        shutil.move(str(path), str(config.STORE_FILES_DIR / _active_name(path)))
+def _commit_store_files(staged: list[Path]) -> Path | None:
+    """Build a complete replacement directory, then swap it into place."""
+    destination = config.STORE_FILES_DIR
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(8)
+    incoming = destination.with_name(f".{destination.name}.incoming-{token}")
+    previous = destination.with_name(f".{destination.name}.previous-{token}")
+    incoming.mkdir()
+    try:
+        # Preserve existing subdirectories, matching the previous behavior.
+        if destination.is_dir():
+            for child in destination.iterdir():
+                if child.is_dir():
+                    shutil.copytree(child, incoming / child.name)
+        for path in staged:
+            shutil.move(str(path), str(incoming / _active_name(path)))
+        if destination.exists():
+            os.replace(destination, previous)
+        try:
+            os.replace(incoming, destination)
+        except Exception:
+            if previous.exists() and not destination.exists():
+                os.replace(previous, destination)
+            raise
+        return previous if previous.exists() else None
+    except Exception:
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise
+
+
+def _finish_store_commit(previous: Path | None, success: bool) -> None:
+    """Discard the old directory only after the index and snapshots are committed."""
+    destination = config.STORE_FILES_DIR
+    if success:
+        if previous:
+            shutil.rmtree(previous, ignore_errors=True)
+        return
+    if destination.exists():
+        shutil.rmtree(destination, ignore_errors=True)
+    if previous and previous.exists():
+        os.replace(previous, destination)
 
 
 def _clean_staging(max_age_hours: int = 6) -> None:
@@ -544,15 +579,17 @@ def _make_info_backup(protect: str = "") -> str | None:
     قبل از هر تغییری) و هیچ‌وقت پاک نمی‌شن. `protect` اسم نسخه‌ایه که داره
     بازگردانی می‌شه تا موقع پاک‌سازی حذف نشه.
     """
-    if not config.INFO_EXCEL_PATH.exists():
+    source = _active_info_path()
+    if not source.exists():
         return None
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_path = config.INFO_BACKUP_DIR / f"{stamp}{source.suffix.lower()}"
     try:
         config.INFO_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(config.INFO_EXCEL_PATH, config.INFO_BACKUP_DIR / f"{stamp}.xlsx")
+        shutil.copy2(source, backup_path)
     except Exception as exc:
         try:
-            (config.INFO_BACKUP_DIR / f"{stamp}.xlsx").unlink(missing_ok=True)
+            backup_path.unlink(missing_ok=True)
         except OSError:
             pass
         app_logger.exception("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود.")
@@ -568,9 +605,8 @@ def _make_info_backup(protect: str = "") -> str | None:
     return stamp
 
 
-def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str]]:
-    """فایل(های) اطلاعاتِ تأییدشده را به فایل فعال تبدیل می‌کند."""
-    _make_info_backup()
+def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None]:
+    """Prepare the incoming workbook and atomically replace the active file."""
     base = staged[0]
     # اگر چند فایل اطلاعاتی از یک آپلود بیرون آمده بود، شیت‌هایشان را روی هم جمع می‌کنیم.
     for extra in staged[1:]:
@@ -590,23 +626,59 @@ def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str]]:
     destination = (config.INFO_EXCEL_PATH if base.suffix.lower() in data_store.EXCEL_SUFFIXES
                    else config.INFO_EXCEL_PATH.with_suffix(base.suffix.lower()))
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    destination.unlink(missing_ok=True)
-    shutil.move(str(base), str(destination))
+    previous = destination.with_name(f".{destination.name}.previous-{secrets.token_hex(8)}")
+    if destination.exists():
+        os.replace(destination, previous)
+    try:
+        os.replace(base, destination)
+    except Exception:
+        if previous.exists() and not destination.exists():
+            os.replace(previous, destination)
+        raise
     config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
-    return destination, carried
+    return destination, carried, (previous if previous.exists() else None)
+
+
+def _finish_info_commit(destination: Path, previous: Path | None, success: bool) -> None:
+    if success:
+        if previous:
+            previous.unlink(missing_ok=True)
+        return
+    destination.unlink(missing_ok=True)
+    if previous and previous.exists():
+        os.replace(previous, destination)
 
 
 def _apply_dataset(key: str, staged: list[Path], mode: str, drop_missing: bool) -> tuple[bool, str, dict]:
-    """فایل‌های فیزیکی را جایگزین می‌کند و سپس موتور همان مجموعه‌داده را اجرا می‌کند."""
+    """Replace source files transactionally with the matching in-memory index."""
     mod = _engine_for(key)
     if key == "charge":
         _make_backup()
-        _commit_store_files(staged)
+        previous = _commit_store_files(staged)
         active = [config.STORE_FILES_DIR / _active_name(p) for p in staged]
-    else:
-        destination, _ = _commit_info_files(staged)
-        active = [destination]
-    return mod.commit_upload(active, mode, drop_missing)
+        try:
+            result = mod.commit_upload(active, mode, drop_missing)
+            _finish_store_commit(previous, bool(result[0]))
+            if not result[0]:
+                mod.reload_data()
+            return result
+        except Exception:
+            _finish_store_commit(previous, False)
+            mod.reload_data()
+            raise
+
+    _make_info_backup()
+    destination, _carried, previous = _commit_info_files(staged)
+    try:
+        result = mod.commit_upload([destination], mode, drop_missing)
+        _finish_info_commit(destination, previous, bool(result[0]))
+        if not result[0]:
+            mod.reload_info()
+        return result
+    except Exception:
+        _finish_info_commit(destination, previous, False)
+        mod.reload_info()
+        raise
 
 
 @app.post("/upload", response_class=HTMLResponse)

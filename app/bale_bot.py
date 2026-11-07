@@ -1255,6 +1255,12 @@ def handle_callback_query(callback_query: dict) -> None:
 
     # --- callback تایید/رد ثبت‌نام ---
     if data.startswith("reg:"):
+        # تایید ثبت‌نام فقط از پیوی مدیرِ تنظیم‌شده مجاز است.
+        if (not config.ADMIN_CHAT_ID
+                or str(chat_id) != str(config.ADMIN_CHAT_ID)
+                or clicking_admin_id != str(config.ADMIN_CHAT_ID)):
+            answer_callback_query(cq_id, "شما اجازه‌ی انجام این عملیات را ندارید.")
+            return
         parts = data.split(":")
         if len(parts) == 3 and parts[1] in ("approve", "reject"):
             target_user_id = parts[2]
@@ -1344,6 +1350,12 @@ def handle_callback_query(callback_query: dict) -> None:
     if data.startswith("reset:done:") or data.startswith("reset:wrong:"):
         _, action, request_id = data.split(":", 2)
         record = _reset_requests.get(request_id)
+        if (action not in ("done", "wrong")
+                or clicking_admin_id not in reset_admins.get_ids()
+                or not record
+                or clicking_admin_id not in record.get("admin_message_ids", {})):
+            answer_callback_query(cq_id, "شما اجازه‌ی پاسخ به این درخواست را ندارید.")
+            return
         if record is None:
             answer_callback_query(cq_id, "این درخواست پیدا نشد یا قبلاً پاک شده.")
             return
@@ -1400,6 +1412,13 @@ def handle_callback_query(callback_query: dict) -> None:
 
     _, action, request_id = parts
     record = _charge_requests.get(request_id)
+
+    if (action not in ("done", "noissue")
+            or clicking_admin_id not in charge_admins.get_ids()
+            or not record
+            or clicking_admin_id not in record.get("admin_message_ids", {})):
+        answer_callback_query(cq_id, "شما اجازه‌ی پاسخ به این درخواست را ندارید.")
+        return
 
     if record is None:
         answer_callback_query(cq_id, "این درخواست پیدا نشد یا قبلاً پاک شده.")

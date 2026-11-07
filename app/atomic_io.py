@@ -1,6 +1,7 @@
 """Helpers for crash-safe replacement of small persistent files."""
 from __future__ import annotations
 
+import errno
 import json
 import os
 import tempfile
@@ -40,3 +41,31 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
 def atomic_write_json(path: Path, value: Any, *, indent: int | None = 2) -> None:
     content = json.dumps(value, ensure_ascii=False, indent=indent)
     atomic_write_text(path, content + "\n")
+
+
+def atomic_exchange_paths(first: Path, second: Path) -> bool:
+    """Atomically exchange two existing paths when Linux renameat2 is available.
+
+    Returns False only when the filesystem/kernel does not support exchange.
+    Other failures are raised so callers can safely abort.
+    """
+    if os.name != "posix":
+        return False
+    try:
+        import ctypes
+    except ImportError:
+        return False
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is None:
+        return False
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p,
+                          ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(-100, os.fsencode(first), -100, os.fsencode(second), 2)
+    if result == 0:
+        return True
+    error = ctypes.get_errno()
+    if error in {errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP, errno.ENOTSUP}:
+        return False
+    raise OSError(error, os.strerror(error), f"{first} <-> {second}")

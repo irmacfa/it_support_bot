@@ -12,6 +12,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import jdatetime
 
@@ -26,7 +27,12 @@ from app import xlsx_sheet, region_experts, dataset_router, presence, separated_
 
 app_logger = logging.getLogger("it_support_panel")
 
-app = FastAPI(title="IT Support Lookup Bot - Admin Panel")
+app = FastAPI(
+    title="IT Support Lookup Bot - Admin Panel",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 # صفحه‌ی /data چند مگابایت HTML برمی‌گردونه؛ بدون فشرده‌سازی، بارگذاریش کند می‌شه.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
@@ -60,6 +66,77 @@ def _is_authed(request: Request) -> bool:
     return True
 
 
+# محدودسازی تلاش‌های ناموفق ورود؛ پنل با یک Worker اجرا می‌شود.
+LOGIN_RATE_LIMIT = 5
+LOGIN_RATE_WINDOW_SECONDS = 15 * 60
+_login_failures: dict[str, list[float]] = {}
+_login_rate_lock = threading.Lock()
+
+
+def _login_client_key(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _login_retry_after(client_key: str) -> int:
+    now = time.monotonic()
+    with _login_rate_lock:
+        attempts = [t for t in _login_failures.get(client_key, [])
+                    if now - t < LOGIN_RATE_WINDOW_SECONDS]
+        if attempts:
+            _login_failures[client_key] = attempts
+        else:
+            _login_failures.pop(client_key, None)
+        if len(attempts) < LOGIN_RATE_LIMIT:
+            return 0
+        return max(1, int(LOGIN_RATE_WINDOW_SECONDS - (now - attempts[0])))
+
+
+def _record_login_failure(client_key: str) -> None:
+    now = time.monotonic()
+    with _login_rate_lock:
+        # پاک‌سازی کلیدهای منقضی برای جلوگیری از رشد بی‌نهایت حافظه.
+        for key, values in list(_login_failures.items()):
+            active = [t for t in values if now - t < LOGIN_RATE_WINDOW_SECONDS]
+            if active:
+                _login_failures[key] = active
+            else:
+                _login_failures.pop(key, None)
+        _login_failures.setdefault(client_key, []).append(now)
+
+
+def _clear_login_failures(client_key: str) -> None:
+    with _login_rate_lock:
+        _login_failures.pop(client_key, None)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """محافظت مرکزی API و بررسی مبدأ درخواست‌های تغییردهنده."""
+    if request.url.path.startswith("/api/") and not _is_authed(request):
+        return JSONResponse(
+            {"ok": False, "error": "احراز هویت لازم است."},
+            status_code=401,
+        )
+
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        source = origin or referer
+        host = request.headers.get("host", "").casefold()
+        try:
+            parsed = urlsplit(source) if source else None
+        except ValueError:
+            parsed = None
+        if (not parsed or parsed.scheme != request.url.scheme
+                or parsed.netloc.casefold() != host):
+            return JSONResponse(
+                {"ok": False, "error": "مبدأ درخواست معتبر نیست."},
+                status_code=403,
+            )
+
+    return await call_next(request)
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     if _is_authed(request):
@@ -69,10 +146,24 @@ def login_page(request: Request):
 
 @app.post("/login", response_class=HTMLResponse)
 def login_submit(request: Request, password: str = Form(...)):
+    client_key = _login_client_key(request)
+    retry_after = _login_retry_after(client_key)
+    if retry_after:
+        response = templates.TemplateResponse(
+            "login.html",
+            {"request": request, "message": "تعداد تلاش‌های ورود زیاد است؛ کمی بعد دوباره امتحان کنید."},
+            status_code=429,
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        return response
+
     if password != config.ADMIN_PASSWORD:
+        _record_login_failure(client_key)
         return templates.TemplateResponse(
             "login.html", {"request": request, "message": "رمز عبور اشتباهه."}
         )
+
+    _clear_login_failures(client_key)
     token = _create_session()
     resp = RedirectResponse("/dashboard", status_code=302)
     resp.set_cookie(

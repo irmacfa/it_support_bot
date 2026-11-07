@@ -31,6 +31,27 @@ logging.basicConfig(
 )
 log = logging.getLogger("bale_bot")
 
+
+class _SecretRedactionFilter(logging.Filter):
+    """توکن بله را از پیام خطا و tracebackها قبل از ثبت در لاگ حذف می‌کند."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        token = config.BALE_BOT_TOKEN
+        if not token:
+            return True
+        message = record.getMessage()
+        if token in message:
+            record.msg = message.replace(token, "[REDACTED]")
+            record.args = ()
+        if record.exc_info:
+            formatted = logging.Formatter().formatException(record.exc_info)
+            record.exc_text = formatted.replace(token, "[REDACTED]")
+            record.exc_info = None
+        return True
+
+
+log.addFilter(_SecretRedactionFilter())
+
 # --- لینک دعوت به ربات ---
 _BOT_USERNAME: str | None = None
 _BOT_ID: int | None = None

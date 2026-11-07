@@ -343,8 +343,10 @@ def _make_backup(protect: str = "") -> str | None:
         target.mkdir(parents=True, exist_ok=True)
         for path in files:
             shutil.copy2(path, target / path.name)
-    except Exception as e:
-        return None
+    except Exception as exc:
+        shutil.rmtree(target, ignore_errors=True)
+        app_logger.exception("ساخت نسخه‌ی پشتیبان فایل‌های شارژ ناموفق بود.")
+        raise RuntimeError("ساخت نسخه‌ی پشتیبان فایل‌های شارژ ناموفق بود؛ هیچ فایلی تغییر نکرد.") from exc
 
     backups = sorted((d for d in config.STORE_BACKUP_DIR.iterdir() if d.is_dir()), reverse=True)
     for index, old in enumerate(backups):
@@ -548,8 +550,10 @@ def _make_info_backup(protect: str = "") -> str | None:
     try:
         config.INFO_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(config.INFO_EXCEL_PATH, config.INFO_BACKUP_DIR / f"{stamp}.xlsx")
-    except Exception:
-        return None
+    except Exception as exc:
+        (config.INFO_BACKUP_DIR / f"{stamp}.xlsx").unlink(missing_ok=True)
+        app_logger.exception("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود.")
+        raise RuntimeError("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود؛ هیچ فایلی تغییر نکرد.") from exc
 
     backups = sorted((p for p in config.INFO_BACKUP_DIR.iterdir()
                       if p.is_file() and not p.name.startswith("baseline-")),

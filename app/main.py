@@ -551,7 +551,10 @@ def _make_info_backup(protect: str = "") -> str | None:
         config.INFO_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(config.INFO_EXCEL_PATH, config.INFO_BACKUP_DIR / f"{stamp}.xlsx")
     except Exception as exc:
-        (config.INFO_BACKUP_DIR / f"{stamp}.xlsx").unlink(missing_ok=True)
+        try:
+            (config.INFO_BACKUP_DIR / f"{stamp}.xlsx").unlink(missing_ok=True)
+        except OSError:
+            pass
         app_logger.exception("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود.")
         raise RuntimeError("ساخت نسخه‌ی پشتیبان فایل اطلاعات ناموفق بود؛ هیچ فایلی تغییر نکرد.") from exc
 

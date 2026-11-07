@@ -1240,6 +1240,9 @@ def handle_callback_query(callback_query: dict) -> None:
     # --- callback منوی پیوی ---
     if data.startswith("pm:"):
         action = data.split(":", 1)[1]
+        if action in ("charge", "info", "shift") and not registration.is_approved(clicking_admin.get("id")):
+            answer_callback_query(cq_id, "برای استفاده از این قابلیت باید تایید شده باشید.")
+            return
         if action == "charge":
             if chat_id:
                 _private_state[chat_id] = "charge"

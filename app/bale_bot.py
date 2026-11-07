@@ -1239,6 +1239,9 @@ def handle_callback_query(callback_query: dict) -> None:
 
     # --- callback منوی پیوی ---
     if data.startswith("pm:"):
+        if not chat_id or str(chat_id) != clicking_admin_id:
+            answer_callback_query(cq_id, "این منو فقط در گفت‌وگوی خصوصی ربات قابل استفاده است.")
+            return
         action = data.split(":", 1)[1]
         if action in ("charge", "info", "shift") and not registration.is_approved(clicking_admin.get("id")):
             answer_callback_query(cq_id, "برای استفاده از این قابلیت باید تایید شده باشید.")
@@ -1375,6 +1378,7 @@ def handle_callback_query(callback_query: dict) -> None:
         _, action, request_id = data.split(":", 2)
         record = _reset_requests.get(request_id)
         if (action not in ("done", "wrong")
+                or str(chat_id) != clicking_admin_id
                 or clicking_admin_id not in reset_admins.get_ids()
                 or not record
                 or clicking_admin_id not in record.get("admin_message_ids", {})):
@@ -1438,6 +1442,7 @@ def handle_callback_query(callback_query: dict) -> None:
     record = _charge_requests.get(request_id)
 
     if (action not in ("done", "noissue")
+            or str(chat_id) != clicking_admin_id
             or clicking_admin_id not in charge_admins.get_ids()
             or not record
             or clicking_admin_id not in record.get("admin_message_ids", {})):

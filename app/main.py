@@ -631,6 +631,9 @@ def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None
     destination = (config.INFO_EXCEL_PATH if base.suffix.lower() in data_store.EXCEL_SUFFIXES
                    else config.INFO_EXCEL_PATH.with_suffix(base.suffix.lower()))
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # Invalidate the old snapshot before changing the source file; if invalidation
+    # fails, the currently active workbook is still untouched.
+    config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
     active_before = _active_info_path()
     previous = active_before.with_name(f".{active_before.name}.previous-{secrets.token_hex(8)}")
     had_previous = active_before.exists()
@@ -642,7 +645,6 @@ def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None
         if had_previous and previous.exists() and not active_before.exists():
             os.replace(previous, active_before)
         raise
-    config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
     return destination, carried, (previous if had_previous else None), (active_before if had_previous else None)
 
 

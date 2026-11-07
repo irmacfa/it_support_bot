@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.atomic_io import atomic_write_json
+from app.atomic_io import atomic_exchange_paths, atomic_write_json
 
 
 class AtomicWriteJsonTests(unittest.TestCase):
@@ -19,6 +19,25 @@ class AtomicWriteJsonTests(unittest.TestCase):
 
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"new": "value"})
             self.assertEqual([p.name for p in path.parent.iterdir()], ["state.json"])
+
+    def test_directory_exchange_is_atomic_when_supported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            active = root / "active"
+            incoming = root / "incoming"
+            active.mkdir()
+            incoming.mkdir()
+            (active / "value.txt").write_text("old", encoding="utf-8")
+            (incoming / "value.txt").write_text("new", encoding="utf-8")
+
+            exchanged = atomic_exchange_paths(incoming, active)
+
+            if exchanged:
+                self.assertEqual((active / "value.txt").read_text(encoding="utf-8"), "new")
+                self.assertEqual((incoming / "value.txt").read_text(encoding="utf-8"), "old")
+            else:
+                self.assertEqual((active / "value.txt").read_text(encoding="utf-8"), "old")
+                self.assertEqual((incoming / "value.txt").read_text(encoding="utf-8"), "new")
 
     def test_serialization_error_preserves_existing_file(self):
         with tempfile.TemporaryDirectory() as directory:

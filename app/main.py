@@ -27,6 +27,9 @@ from app import xlsx_sheet, region_experts, dataset_router, presence, separated_
 
 app_logger = logging.getLogger("it_support_panel")
 
+if not config.ADMIN_PASSWORD or config.ADMIN_PASSWORD.strip() in {"changeme", "change_this_password"}:
+    raise RuntimeError("ADMIN_PASSWORD must be configured in the .env file before starting the admin panel.")
+
 app = FastAPI(
     title="IT Support Lookup Bot - Admin Panel",
     docs_url=None,
@@ -1699,8 +1702,12 @@ def usage_send(request: Request, chat_id: str = Form(...)):
     active_users, inactive_users, admins, top_admin_id, reset_admins_list, top_reset_admin_id = _build_usage_data()
 
     text = bale_bot.format_usage_report(active_users, inactive_users, admins, top_admin_id, reset_admins_list, top_reset_admin_id)
-    msg_id = bale_bot.send_message(int(chat_id), text)
-    message = "✅ گزارش به گروه ارسال شد." if msg_id is not None else "❌ ارسال گزارش ناموفق بود."
+    target = next((g for g in groups.list_all() if str(g.get("chat_id")) == str(chat_id)), None)
+    if target is None:
+        message = "❌ گروه انتخاب‌شده در فهرست گروه‌های شناخته‌شده نیست."
+    else:
+        msg_id = bale_bot.send_message(target["chat_id"], text)
+        message = "✅ گزارش به گروه ارسال شد." if msg_id is not None else "❌ ارسال گزارش ناموفق بود."
 
     from_date, to_date = _default_week_range()
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
@@ -2279,10 +2286,13 @@ def broadcast_send(request: Request, chat_id: str = Form(...), text: str = Form(
         return RedirectResponse("/login", status_code=302)
 
     text = text.strip()
+    target = next((g for g in groups.list_all() if str(g.get("chat_id")) == str(chat_id)), None)
     if not text:
         message = "❌ متن پیام نمی‌تونه خالی باشه."
+    elif target is None:
+        message = "❌ گروه انتخاب‌شده در فهرست گروه‌های شناخته‌شده نیست."
     else:
-        msg_id = bale_bot.send_message(int(chat_id), text)
+        msg_id = bale_bot.send_message(target["chat_id"], text)
         message = "✅ پیام به گروه ارسال شد." if msg_id is not None else "❌ ارسال پیام ناموفق بود."
 
     return templates.TemplateResponse(

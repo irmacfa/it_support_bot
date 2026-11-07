@@ -254,7 +254,11 @@ class Engine:
 
         snapshot = self._read_snapshot(paths)
         if snapshot:
-            self.apply_index(snapshot["index"], snapshot["schema"], write_snapshot=False)
+            try:
+                self.apply_index(snapshot["index"], snapshot["schema"], write_snapshot=False)
+            except Exception:
+                self._last_error = "ذخیره‌ی گزارش ناموفق بود؛ ایندکس قبلی حفظ شد."
+                return False, self._last_error
             return True, self.report_summary(snapshot["schema"])
 
         index, report = self.build_from_paths(paths)
@@ -262,7 +266,11 @@ class Engine:
             self._last_error = self.report_summary(report)
             return False, self._last_error
 
-        self.apply_index(index, report)
+        try:
+            self.apply_index(index, report)
+        except Exception:
+            self._last_error = "ذخیره‌ی وضعیت ناموفق بود؛ ایندکس قبلی حفظ شد."
+            return False, self._last_error
         return True, self.report_summary(report)
 
     def auto_reload(self, force: bool = False) -> None:

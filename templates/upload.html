@@ -352,7 +352,7 @@ select {
                     <td style="font-size:.76rem;">{{ d.files | join('، ') or '—' }}</td>
                     <td style="font-size:.74rem;color:var(--muted);">
                         {% if d.report.last_change %}
-                            {{ d.report.last_change.at }} —
+                            {{ d.report.last_change.at | shamsi }} —
                             {{ 'فقط تغییرات' if d.report.last_change.mode == 'merge' else 'جایگزینی' }} —
                             🆕{{ d.report.last_change.counts.added }} 🔄{{ d.report.last_change.counts.changed }}
                         {% else %}—{% endif %}

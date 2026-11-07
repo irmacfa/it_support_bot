@@ -1,0 +1,571 @@
+/* ============================================================================
+   farsiui.css — معادل HTML/CSS خالص از کامپوننت‌های FarsiUI
+   ----------------------------------------------------------------------------
+   چون پنل ربات با FastAPI + Jinja (HTML ساده) ساخته شده و FarsiUI کامپوننت‌های
+   React/TSX است، این فایل همان توکن‌ها، واریانت‌ها و حالت‌های بصری FarsiUI را
+   به CSS خالص ترجمه می‌کند. استفاده: فقط کلاس روی المان HTML بگذار.
+
+     <button class="fui-btn">ثبت</button>
+     <button class="fui-btn fui-btn--outline">انصراف</button>
+     <span class="fui-badge fui-badge--success">فعال</span>
+     <div class="fui-card"> ... </div>
+     <input class="fui-input" />
+
+   متغیرها با پالت پنل (_layout_head.html) هم‌راستا هستند؛ اگر نبودند، فایل
+   خودش fallbackهای معنایی FarsiUI را تعریف می‌کند.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   توکن‌های معنایی FarsiUI (در صورت نبود، از پالت پنل مشتق می‌شوند)
+--------------------------------------------------------------------------- */
+:root {
+  --fui-radius: var(--radius-md, 10px);
+  --fui-radius-sm: var(--radius-sm, 8px);
+  --fui-radius-lg: var(--radius-lg, 14px);
+  --fui-radius-pill: 999px;
+
+  /* نقش‌های رنگ — روی پالت تیره‌ی پنل نگاشت می‌شوند */
+  --fui-background: var(--bg, #0b1220);
+  --fui-foreground: var(--text, #e2e8f0);
+  --fui-primary: var(--accent, #3b82f6);
+  --fui-primary-foreground: #ffffff;
+  --fui-primary-hover: var(--accent-hover, #2563eb);
+  --fui-secondary: var(--card2, #263347);
+  --fui-secondary-foreground: var(--text, #e2e8f0);
+  --fui-muted: var(--card2, #263347);
+  --fui-muted-foreground: var(--muted, #94a3b8);
+  --fui-border: var(--border, #334155);
+  --fui-input: var(--border, #334155);
+  --fui-ring: var(--accent, #3b82f6);
+  --fui-destructive: var(--red, #ef4444);
+  --fui-success: var(--green, #10b981);
+  --fui-warning: var(--yellow, #f59e0b);
+
+  --fui-transition: var(--duration, .18s) var(--ease, cubic-bezier(.22,1,.36,1));
+  --fui-font: var(--font-sans, 'Vazirmatn', Tahoma, sans-serif);
+}
+
+/* ---------------------------------------------------------------------------
+   Button — معادل @farsiui/button
+   واریانت‌ها: default / outline / secondary / ghost / destructive / link
+   اندازه‌ها:  sm / md(default) / lg / icon
+--------------------------------------------------------------------------- */
+.fui-btn {
+  --_h: 2.25rem; --_px: 1rem; --_fs: .875rem; --_gap: .375rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--_gap);
+  height: var(--_h);
+  padding: 0 var(--_px);
+  font-family: inherit;
+  font-size: var(--_fs);
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: var(--fui-radius);
+  background: var(--fui-primary);
+  color: var(--fui-primary-foreground);
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
+  transition: background var(--fui-transition), border-color var(--fui-transition),
+              color var(--fui-transition), transform var(--fui-transition),
+              box-shadow var(--fui-transition);
+}
+.fui-btn:hover { background: var(--fui-primary-hover); }
+.fui-btn:active { transform: translateY(1px); }
+.fui-btn:focus-visible {
+  outline: none;
+  border-color: var(--fui-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fui-ring) 35%, transparent);
+}
+.fui-btn:disabled,
+.fui-btn[disabled] {
+  pointer-events: none;
+  opacity: .5;
+}
+.fui-btn > svg { width: 1rem; height: 1rem; flex-shrink: 0; }
+
+/* واریانت‌ها */
+.fui-btn--outline {
+  background: transparent;
+  color: var(--fui-foreground);
+  border-color: var(--fui-border);
+}
+.fui-btn--outline:hover {
+  background: var(--fui-muted);
+  color: var(--fui-foreground);
+}
+.fui-btn--secondary {
+  background: var(--fui-secondary);
+  color: var(--fui-secondary-foreground);
+}
+.fui-btn--secondary:hover {
+  background: color-mix(in srgb, var(--fui-secondary) 92%, var(--fui-foreground));
+}
+.fui-btn--ghost {
+  background: transparent;
+  color: var(--fui-foreground);
+}
+.fui-btn--ghost:hover { background: var(--fui-muted); }
+.fui-btn--destructive {
+  background: color-mix(in srgb, var(--fui-destructive) 14%, transparent);
+  color: var(--fui-destructive);
+}
+.fui-btn--destructive:hover {
+  background: color-mix(in srgb, var(--fui-destructive) 22%, transparent);
+}
+.fui-btn--link {
+  background: transparent;
+  color: var(--fui-primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  padding: 0;
+  height: auto;
+}
+.fui-btn--link:hover { background: transparent; }
+
+/* اندازه‌ها */
+.fui-btn--sm { --_h: 1.9rem; --_px: .65rem; --_fs: .8rem; --_gap: .3rem; }
+.fui-btn--lg { --_h: 2.6rem; --_px: 1.4rem; --_fs: .95rem; }
+.fui-btn--icon { --_px: 0; width: 2.25rem; }
+.fui-btn--icon-sm { --_px: 0; width: 1.9rem; height: 1.9rem; }
+
+/* ---------------------------------------------------------------------------
+   Input / Textarea / Label — معادل @farsiui/input ، textarea ، label
+--------------------------------------------------------------------------- */
+.fui-label {
+  display: block;
+  margin-bottom: .375rem;
+  font-size: .85rem;
+  font-weight: 500;
+  color: var(--fui-foreground);
+}
+.fui-input,
+.fui-textarea,
+.fui-select {
+  display: block;
+  width: 100%;
+  padding: .55rem .75rem;
+  font-family: inherit;
+  font-size: .875rem;
+  line-height: 1.4;
+  color: var(--fui-foreground);
+  background: color-mix(in srgb, var(--fui-input) 22%, transparent);
+  border: 1px solid var(--fui-input);
+  border-radius: var(--fui-radius-sm);
+  transition: border-color var(--fui-transition), box-shadow var(--fui-transition);
+}
+.fui-textarea { min-height: 6rem; resize: vertical; }
+.fui-input::placeholder,
+.fui-textarea::placeholder { color: var(--fui-muted-foreground); }
+.fui-input:focus,
+.fui-textarea:focus,
+.fui-select:focus {
+  outline: none;
+  border-color: var(--fui-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fui-ring) 30%, transparent);
+}
+.fui-input:disabled,
+.fui-textarea:disabled { opacity: .5; pointer-events: none; }
+.fui-input[aria-invalid="true"],
+.fui-textarea[aria-invalid="true"] {
+  border-color: var(--fui-destructive);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fui-destructive) 20%, transparent);
+}
+.fui-field { margin-bottom: 1rem; }
+.fui-field .fui-input,
+.fui-field .fui-textarea,
+.fui-field .fui-select { margin-bottom: 0; }
+.fui-field-hint { margin-top: .3rem; font-size: .75rem; color: var(--fui-muted-foreground); }
+.fui-field-error { margin-top: .3rem; font-size: .75rem; color: var(--fui-destructive); }
+
+/* ---------------------------------------------------------------------------
+   Badge — معادل @farsiui/badge
+--------------------------------------------------------------------------- */
+.fui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .18rem .55rem;
+  font-size: .72rem;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  border-radius: var(--fui-radius-pill);
+  background: var(--fui-secondary);
+  color: var(--fui-secondary-foreground);
+  white-space: nowrap;
+}
+.fui-badge--primary {
+  background: color-mix(in srgb, var(--fui-primary) 16%, transparent);
+  color: var(--fui-primary);
+  border-color: color-mix(in srgb, var(--fui-primary) 30%, transparent);
+}
+.fui-badge--success {
+  background: color-mix(in srgb, var(--fui-success) 16%, transparent);
+  color: var(--fui-success);
+  border-color: color-mix(in srgb, var(--fui-success) 30%, transparent);
+}
+.fui-badge--warning {
+  background: color-mix(in srgb, var(--fui-warning) 16%, transparent);
+  color: var(--fui-warning);
+  border-color: color-mix(in srgb, var(--fui-warning) 30%, transparent);
+}
+.fui-badge--destructive {
+  background: color-mix(in srgb, var(--fui-destructive) 16%, transparent);
+  color: var(--fui-destructive);
+  border-color: color-mix(in srgb, var(--fui-destructive) 30%, transparent);
+}
+.fui-badge--outline {
+  background: transparent;
+  color: var(--fui-foreground);
+  border-color: var(--fui-border);
+}
+
+/* ---------------------------------------------------------------------------
+   Card — معادل @farsiui/card
+--------------------------------------------------------------------------- */
+.fui-card {
+  background: var(--card, var(--fui-background));
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius-lg);
+  box-shadow: var(--shadow-sm, 0 1px 2px 0 rgb(0 0 0 / .25));
+}
+.fui-card-header { padding: .8rem 1rem; border-bottom: 1px solid var(--fui-border); }
+.fui-card-title { font-size: .92rem; font-weight: 700; color: var(--fui-foreground); }
+.fui-card-description { margin-top: .15rem; font-size: .78rem; color: var(--fui-muted-foreground); }
+.fui-card-content { padding: 1rem; }
+.fui-card-footer {
+  padding: .8rem 1rem;
+  border-top: 1px solid var(--fui-border);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Table — معادل @farsiui/table (RTL-native)
+--------------------------------------------------------------------------- */
+.fui-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius-lg);
+}
+.fui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+.fui-table th,
+.fui-table td {
+  text-align: right;
+  padding: .65rem .85rem;
+  border-bottom: 1px solid var(--fui-border);
+}
+.fui-table th {
+  font-weight: 600;
+  color: var(--fui-muted-foreground);
+  background: var(--card2, var(--fui-muted));
+}
+.fui-table tbody tr { transition: background var(--fui-transition); }
+.fui-table tbody tr:hover {
+  background: color-mix(in srgb, var(--fui-muted-foreground) 8%, transparent);
+}
+.fui-table tbody tr:last-child td { border-bottom: none; }
+.fui-table .fui-cell-ltr { direction: ltr; text-align: left; }
+
+/* ---------------------------------------------------------------------------
+   Dialog / Modal — معادل @farsiui/dialog
+--------------------------------------------------------------------------- */
+.fui-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(2 6 23 / .65);
+  backdrop-filter: blur(2px);
+}
+.fui-overlay.active,
+.fui-overlay[data-open="true"] {
+  display: flex;
+}
+.fui-dialog {
+  width: 100%;
+  max-width: 28rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background: var(--card, var(--fui-background));
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius-lg);
+  box-shadow: var(--shadow-lg, 0 12px 28px -6px rgb(0 0 0 / .45));
+}
+.fui-dialog-header { padding: 1.1rem 1.25rem; border-bottom: 1px solid var(--fui-border); }
+.fui-dialog-title { font-size: 1rem; font-weight: 700; }
+.fui-dialog-description { margin-top: .25rem; font-size: .82rem; color: var(--fui-muted-foreground); }
+.fui-dialog-body { padding: 1.25rem; }
+.fui-dialog-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--fui-border);
+  display: flex;
+  justify-content: flex-start;
+  gap: .5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Alert — معادل @farsiui/alert
+--------------------------------------------------------------------------- */
+.fui-alert {
+  display: flex;
+  gap: .6rem;
+  padding: .8rem 1rem;
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius-sm);
+  background: var(--card2, var(--fui-muted));
+  color: var(--fui-foreground);
+  font-size: .85rem;
+}
+.fui-alert--success {
+  background: color-mix(in srgb, var(--fui-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--fui-success) 30%, transparent);
+  color: var(--fui-success);
+}
+.fui-alert--destructive {
+  background: color-mix(in srgb, var(--fui-destructive) 14%, transparent);
+  border-color: color-mix(in srgb, var(--fui-destructive) 30%, transparent);
+  color: var(--fui-destructive);
+}
+.fui-alert-title { font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
+   Tabs — معادل @farsiui/tabs (data-driven، بدون JS framework)
+--------------------------------------------------------------------------- */
+.fui-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .25rem;
+  background: var(--card2, var(--fui-muted));
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius);
+}
+.fui-tab {
+  padding: .4rem .9rem;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--fui-muted-foreground);
+  background: transparent;
+  border: none;
+  border-radius: var(--fui-radius-sm);
+  cursor: pointer;
+  transition: background var(--fui-transition), color var(--fui-transition);
+  font-family: inherit;
+}
+.fui-tab:hover { color: var(--fui-foreground); }
+.fui-tab[aria-selected="true"] {
+  background: var(--fui-background);
+  color: var(--fui-foreground);
+  box-shadow: var(--shadow-sm, 0 1px 2px 0 rgb(0 0 0 / .25));
+}
+
+/* ---------------------------------------------------------------------------
+   Separator — معادل @farsiui/separator
+--------------------------------------------------------------------------- */
+.fui-separator {
+  border: none;
+  border-top: 1px solid var(--fui-border);
+  margin: 1rem 0;
+}
+.fui-separator--vertical {
+  display: inline-block;
+  width: 1px;
+  height: 1.25rem;
+  border-top: none;
+  border-right: 1px solid var(--fui-border);
+  margin: 0 .5rem;
+  vertical-align: middle;
+}
+
+/* ---------------------------------------------------------------------------
+   Skeleton — معادل @farsiui/skeleton
+--------------------------------------------------------------------------- */
+.fui-skeleton {
+  border-radius: var(--fui-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--card2, var(--fui-muted)) 25%,
+    color-mix(in srgb, var(--card2, var(--fui-muted)) 60%, var(--fui-border)) 37%,
+    var(--card2, var(--fui-muted)) 63%
+  );
+  background-size: 400% 100%;
+  animation: fui-skeleton 1.4s ease infinite;
+}
+@keyframes fui-skeleton {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* ---------------------------------------------------------------------------
+   Toast — معادل @farsiui/toast (با کلاس .fui-toast-show)
+--------------------------------------------------------------------------- */
+.fui-toast {
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .7rem 1rem;
+  font-size: .85rem;
+  background: var(--card, var(--fui-background));
+  color: var(--fui-foreground);
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius);
+  box-shadow: var(--shadow-lg, 0 12px 28px -6px rgb(0 0 0 / .45));
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--fui-transition), transform var(--fui-transition);
+  pointer-events: none;
+}
+.fui-toast.fui-toast-show { opacity: 1; transform: translateY(0); }
+.fui-toast--success { border-color: color-mix(in srgb, var(--fui-success) 40%, transparent); }
+.fui-toast--error { border-color: color-mix(in srgb, var(--fui-destructive) 40%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   Spinner — معادل @farsiui/spinner
+--------------------------------------------------------------------------- */
+.fui-spinner {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid color-mix(in srgb, var(--fui-foreground) 20%, transparent);
+  border-top-color: var(--fui-primary);
+  border-radius: 50%;
+  animation: fui-spin .7s linear infinite;
+}
+@keyframes fui-spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------------------
+   Switch — معادل @farsiui/switch (با input[type=checkbox].fui-switch)
+--------------------------------------------------------------------------- */
+.fui-switch {
+  --_w: 2.4rem; --_h: 1.35rem;
+  position: relative;
+  display: inline-block;
+  width: var(--_w);
+  height: var(--_h);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.fui-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%; height: 100%;
+  margin: 0; cursor: pointer;
+}
+.fui-switch .fui-switch-track {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--fui-input) 60%, transparent);
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius-pill);
+  transition: background var(--fui-transition);
+}
+.fui-switch .fui-switch-thumb {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: calc(var(--_h) - 8px);
+  height: calc(var(--_h) - 8px);
+  transform: translateY(-50%);
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--fui-transition);
+}
+.fui-switch input:checked ~ .fui-switch-track { background: var(--fui-primary); }
+.fui-switch input:checked ~ .fui-switch-thumb {
+  transform: translateY(-50%) translateX(calc(-1 * (var(--_w) - var(--_h))));
+}
+.fui-switch input:focus-visible ~ .fui-switch-track {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fui-ring) 30%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Progress — معادل @farsiui/progress
+--------------------------------------------------------------------------- */
+.fui-progress {
+  position: relative;
+  width: 100%;
+  height: .5rem;
+  overflow: hidden;
+  background: var(--card2, var(--fui-muted));
+  border-radius: var(--fui-radius-pill);
+}
+.fui-progress-bar {
+  height: 100%;
+  background: var(--fui-primary);
+  border-radius: var(--fui-radius-pill);
+  transition: width var(--fui-transition);
+}
+
+/* ---------------------------------------------------------------------------
+   Avatar — معادل @farsiui/avatar
+--------------------------------------------------------------------------- */
+.fui-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--fui-secondary);
+  color: var(--fui-secondary-foreground);
+  font-size: .8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.fui-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------------------------------------------------------------------------
+   Empty state — معادل @farsiui/empty
+--------------------------------------------------------------------------- */
+.fui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--fui-muted-foreground);
+}
+.fui-empty-icon { font-size: 1.8rem; opacity: .7; }
+.fui-empty-title { font-weight: 600; color: var(--fui-foreground); }
+.fui-empty-desc { font-size: .82rem; }
+
+/* ---------------------------------------------------------------------------
+   اسکرول‌بار و کاهش حرکت
+--------------------------------------------------------------------------- */
+.fui-scroll { overflow: auto; }
+.fui-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.fui-scroll::-webkit-scrollbar-thumb {
+  background: var(--slate-600, #475569);
+  border-radius: var(--fui-radius-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fui-btn, .fui-toast, .fui-skeleton, .fui-spinner,
+  .fui-switch .fui-switch-track, .fui-switch .fui-switch-thumb {
+    transition: none !important;
+    animation: none !important;
+  }
+}

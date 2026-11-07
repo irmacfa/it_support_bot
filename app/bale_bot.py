@@ -33,22 +33,28 @@ log = logging.getLogger("bale_bot")
 
 # --- لینک دعوت به ربات ---
 _BOT_USERNAME: str | None = None
+_BOT_ID: int | None = None
 
 
-def _get_bot_username() -> str:
-    """یوزرنیم ربات رو از API بله می‌گیره (فقط یه بار)."""
-    global _BOT_USERNAME
-    if _BOT_USERNAME:
-        return _BOT_USERNAME
+def _fetch_bot_identity() -> None:
+    """اطلاعات خود ربات (id و username) رو یه بار از API بله می‌گیره."""
+    global _BOT_USERNAME, _BOT_ID
+    if _BOT_USERNAME is not None and _BOT_ID is not None:
+        return
     try:
         resp = requests.get(f"{config.BALE_API_BASE_URL}/getMe", timeout=10)
         data = resp.json()
         if data.get("ok"):
             _BOT_USERNAME = data["result"].get("username", "")
-            return _BOT_USERNAME
+            _BOT_ID = data["result"].get("id")
     except Exception:
         pass
-    return ""
+
+
+def _get_bot_username() -> str:
+    """یوزرنیم ربات رو از API بله می‌گیره (فقط یه بار)."""
+    _fetch_bot_identity()
+    return _BOT_USERNAME or ""
 
 
 def _bot_deep_link() -> str:
@@ -143,7 +149,7 @@ _pending_registration: set = set()
 # کلید: (chat_id, user_id) — مقدار: {"trigger_id", "prompt_id", "extra_ids": [...], "created_at", "display_name"}
 _pending_info: dict[tuple, dict] = {}
 
-CHARGE_BUTTON_NOISSUE = "شارژ داره"
+CHARGE_BUTTON_NOISSUE = "🔋 شارژ داره"
 CHARGE_BUTTON_DONE = "✅ شارژ انجام شد"
 
 # درخواست‌های شارژ درحال‌انتظار برای تایید ادمین، کلید: request_id
@@ -384,7 +390,9 @@ _CHAT_MEMBER_COUNT_TTL = 30  # ثانیه
 
 
 def get_chat_member_count(chat_id) -> int | None:
-    """تعداد واقعی اعضای گروه رو از API بله می‌گیره (کل اعضا، نه فقط کسایی که پیام دادن)."""
+    """تعداد واقعی اعضای انسانی گروه رو از API بله می‌گیره.
+    توجه: getChatMemberCount خود ربات رو هم به‌عنوان عضو حساب می‌کنه،
+    پس برای «تعداد افراد» باید ۱ (خود ربات) کم بشه تا آمار «روح» غلط نشه."""
     key = str(chat_id)
     cached = _chat_member_count_cache.get(key)
     if cached and time.time() - cached[1] < _CHAT_MEMBER_COUNT_TTL:
@@ -398,6 +406,9 @@ def get_chat_member_count(chat_id) -> int | None:
         data = resp.json()
         if data.get("ok"):
             count = data.get("result")
+            if isinstance(count, int):
+                # کم‌کردن خود ربات از شمار اعضا (ربات عضو گروهه)
+                count = max(count - 1, 0)
             _chat_member_count_cache[key] = (count, time.time())
             return count
         log.error("خطا در getChatMemberCount: %s", data)
@@ -703,7 +714,7 @@ def handle_group_message(message: dict) -> None:
                 usage_stats.record_code_lookup(normalized_code, "charge")
 
                 if results:
-                    _notify_charge_admins(chat_id, answer_message_id, normalized_code, charge_entry["display_name"], reply_text)
+                    _notify_charge_admins(chat_id, answer_message_id, normalized_code, charge_entry["display_name"], results)
 
                 delete_message(chat_id, charge_entry["trigger_id"])
                 delete_message(chat_id, charge_entry["prompt_id"])
@@ -819,7 +830,7 @@ def handle_group_message(message: dict) -> None:
             usage_stats.record_action(user_id, "reset")
             if kind == "store":
                 usage_stats.record_code_lookup(normalized_code, "reset")
-            _notify_reset_admins(chat_id, answer_message_id, kind, target, reset_entry["display_name"])
+            _notify_reset_admins(chat_id, answer_message_id, kind, target, reset_entry["display_name"], user_id)
 
             delete_message(chat_id, reset_entry["trigger_id"])
             delete_message(chat_id, reset_entry["prompt_id"])
@@ -954,7 +965,7 @@ def handle_group_message(message: dict) -> None:
             send_message(chat_id, chunk)
 
 
-def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: str, requester_name: str, answer_text: str) -> None:
+def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: str, requester_name: str, results: list[dict] | None) -> None:
     admin_ids = charge_admins.get_ids()
     if not admin_ids:
         log.warning("هیچ مسئول شارژی توی پنل ثبت نشده؛ درخواست شارژ برای کسی ارسال نشد.")
@@ -973,7 +984,18 @@ def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: st
         "created_at": time.time(),
     }
 
-    notify_text = f"🔔 کاربر {requester_name} درخواست بررسی شارژ LTE را دارد.\n\n{answer_text}"
+    mobiles: list[str] = []
+    for record in results or []:
+        mobile = record.get("mobile")
+        if mobile:
+            formatted = _format_mobile(mobile)
+            if formatted and formatted not in mobiles:
+                mobiles.append(formatted)
+
+    notify_text = f"شارژ فروشگاه {code} رو انجام بده"
+    if mobiles:
+        phone_lines = "\n".join(f"📞 شماره سیم‌کارت: {m}" for m in mobiles)
+        notify_text += f"\n\n{phone_lines}"
     keyboard = {
         "inline_keyboard": [[
             {"text": CHARGE_BUTTON_NOISSUE, "callback_data": f"charge:noissue:{request_id}"},
@@ -1064,17 +1086,24 @@ def _reset_request_card(requester_name: str, kind: str, target: str) -> str:
     )
 
 
-def _reset_done_reply_text(kind: str, target: str, admin_name: str) -> str:
-    """پیام تأیید ریست رمز با رمز پیش‌فرض (ستادی: ۹ رقم، فروشگاه: ۸ رقم)
-    و مشخص بودن مسئولی که ریست رو انجام داد (مثل شارژ)."""
-    if kind == "store":
-        return (
-            f"⚠️ رمز فروشگاه {target} توسط {admin_name} ریست شد.\n"
-            f"🔑 رمز پیش فرض: {RESET_DEFAULT_PASSWORD_STORE}"
-        )
+def _reset_target_line(kind: str, target: str) -> str:
+    return f"فروشگاه {target}" if kind == "store" else f"کاربر {target}"
+
+
+def _reset_done_group_text(kind: str, target: str, admin_name: str, requester_name: str = "") -> str:
+    """پیام تأیید ریست برای گروه — بدون رمز پیش‌فرض."""
+    requester = f"به درخواست {requester_name}، " if requester_name else ""
+    return f"⚠️ {requester}رمز {_reset_target_line(kind, target)} توسط {admin_name} ریست شد."
+
+
+def _reset_done_reply_text(kind: str, target: str, admin_name: str, requester_name: str = "") -> str:
+    """پیام تأیید ریست همراه با رمز پیش‌فرض (ستادی: ۹ رقم، فروشگاه: ۸ رقم) —
+    این پیام فقط پیوی خود درخواست‌کننده فرستاده می‌شه."""
+    password = RESET_DEFAULT_PASSWORD_STORE if kind == "store" else RESET_DEFAULT_PASSWORD_HQ
+    requester = f"به درخواست {requester_name}، " if requester_name else ""
     return (
-        f"⚠️ رمز کاربر {target} توسط {admin_name} ریست شد.\n"
-        f"🔑 رمز پیش فرض: {RESET_DEFAULT_PASSWORD_HQ}"
+        f"⚠️ {requester}رمز {_reset_target_line(kind, target)} توسط {admin_name} ریست شد.\n"
+        f"🔑 رمز پیش فرض: {password}"
     )
 
 
@@ -1090,7 +1119,7 @@ def _reset_wrong_reply_text(kind: str, target: str, admin_name: str) -> str:
     )
 
 
-def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str, target: str, requester_name: str) -> None:
+def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str, target: str, requester_name: str, requester_user_id=None) -> None:
     """درخواست ریست رمز رو پیوی برای مسئولین ریست (زرابی، بصیر و…) می‌فرسته."""
     admin_ids = reset_admins.get_ids()
     if not admin_ids:
@@ -1104,6 +1133,7 @@ def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str
         "kind": kind,
         "target": target,
         "requester_name": requester_name,
+        "requester_user_id": requester_user_id,
         "resolved": False,
         "admin_message_ids": {},
         "group_reminder_ids": [],
@@ -1111,10 +1141,7 @@ def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str
         "created_at": time.time(),
     }
 
-    if kind == "store":
-        notify_text = f"🔔 کاربر {requester_name} درخواست ریست رمز فروشگاه {target} رو داره."
-    else:
-        notify_text = f"🔔 کاربر {requester_name} درخواست ریست رمز کاربر {target} رو داره."
+    notify_text = f"رمز {_reset_target_line(kind, target)} رو ریست کن"
     keyboard = {
         "inline_keyboard": [[
             {"text": RESET_BUTTON_DONE, "callback_data": f"reset:done:{request_id}"},
@@ -1325,6 +1352,8 @@ def handle_callback_query(callback_query: dict) -> None:
             return
 
         record["resolved"] = True
+        record["resolved_at"] = time.time()
+        record["resolved_action"] = action
         admin_name = _display_name(clicking_admin)
         label = RESET_KIND_LABELS.get(record["kind"], record["kind"])
         elapsed_seconds = time.time() - record.get("created_at", time.time())
@@ -1333,11 +1362,17 @@ def handle_callback_query(callback_query: dict) -> None:
             reply_text = _reset_wrong_reply_text(record["kind"], record["target"], admin_name)
             parse_mode = "html"
             answer_callback_query(cq_id, "ثبت شد؛ مشخصات اشتباه بود ❌")
+            send_message(record["group_chat_id"], reply_text, reply_to_message_id=record["answer_message_id"], parse_mode=parse_mode)
         else:
-            reply_text = _reset_done_reply_text(record["kind"], record["target"], admin_name)
+            requester_name = record.get("requester_name", "")
+            reply_text = _reset_done_reply_text(record["kind"], record["target"], admin_name, requester_name)
             parse_mode = None
             answer_callback_query(cq_id, "ثبت شد ✅")
-        send_message(record["group_chat_id"], reply_text, reply_to_message_id=record["answer_message_id"], parse_mode=parse_mode)
+            # در گروه فقط «به درخواست چه‌کسی و توسط چه‌کسی» گفته میشه (بدون رمز)؛
+            # این پیام آخر می‌مونه و پاک نمیشه، ولی کارت درخواست و یادآوری‌ها فوراً پاک میشن.
+            group_text = _reset_done_group_text(record["kind"], record["target"], admin_name, requester_name)
+            send_message(record["group_chat_id"], group_text)
+            delete_message(record["group_chat_id"], record["answer_message_id"])
         log.info("درخواست ریست رمز %s (%s %s) توسط %s پاسخ داده شد: %s", request_id, label, record["target"], admin_name, action)
 
         # دکمه‌ها رو از پیام اول ارسالی به مسئولین حذف کن، پیام‌های یادآوری رو کامل حذف کن،
@@ -1348,7 +1383,9 @@ def handle_callback_query(callback_query: dict) -> None:
                 delete_message(admin_id, msg_id)
             if first_msg is not None:
                 clear_message_buttons(admin_id, first_msg)
-            if admin_id != clicking_admin_id:
+            if admin_id == clicking_admin_id:
+                send_message(admin_id, reply_text, parse_mode=parse_mode)
+            else:
                 send_message(admin_id, f"ℹ️ این درخواست قبلاً توسط {admin_name} پاسخ داده شد.\n{reply_text}", parse_mode=parse_mode)
         for gr_id in record.get("group_reminder_ids", []):
             delete_message(record["group_chat_id"], gr_id)
@@ -1373,6 +1410,8 @@ def handle_callback_query(callback_query: dict) -> None:
         return
 
     record["resolved"] = True
+    record["resolved_at"] = time.time()
+    record["resolved_action"] = action
     admin_name = _display_name(clicking_admin)
     answer_callback_query(cq_id, "ثبت شد ✅")
 
@@ -1384,8 +1423,8 @@ def handle_callback_query(callback_query: dict) -> None:
     else:
         reply_text = (
             f"ℹ️ طبق بررسی {admin_name}:\n"
-            f"🏪 فروشگاه {record['code']}\n"
-            f"💯 شارژ دارد"
+            f"\n"
+            f"🏪 فروشگاه {record['code']} : 🔋 شارژ داره"
         )
 
     send_message(record["group_chat_id"], reply_text, reply_to_message_id=record["answer_message_id"])
@@ -1407,7 +1446,7 @@ def handle_callback_query(callback_query: dict) -> None:
 
 
 def _shift_lines(record: dict) -> list[str]:
-    """فقط بخش‌هایی که واقعاً دیتا دارن رو می‌سازه (روزهای تعطیل/پنجشنبه-جمعه که سرویس دسک *** ه، اون بخش اصلاً نمیاد)."""
+    """فقط بخش‌هایی که واقعاً دیتا دارن رو می‌سازه."""
     desk1 = record.get("desk1")
     desk2 = record.get("desk2")
     has_desk1 = bool(desk1) and desk1 != "***"
@@ -1422,10 +1461,30 @@ def _shift_lines(record: dict) -> list[str]:
             lines.append(f"👤 کارشناس دوم: {desk2}")
         lines.append("")
 
+    morning = (record.get("morning_shift") or "").strip()
+    evening = (record.get("evening_shift") or "").strip()
+    # اگه شیفت روزانه وارد شده، همیشه نشون بده (مخصوصاً روزهای تعطیل)
+    if morning or evening:
+        lines.append("🕖 شیفت روزانه:")
+        if morning:
+            # اگه فقط ساعت نوشته نشده ولی اسم هست با هم نمایش میشه
+            if morning and ' ' in morning and ':' in morning:
+                lines.append(f"👤 {morning}")
+            elif morning:
+                lines.append(f"👤 {morning}")
+            else:
+                pass
+        if evening:
+            lines.append(f"👤 {evening}")
+        lines.append("")
+
     lines.append("🌙 شیفت شب:")
-    lines.append(f"👤 {record['night_primary']}")
-    if record.get("night_secondary") and record["night_secondary"] != "***":
-        lines.append(f"👤 {record['night_secondary']}")
+    n1 = record.get("night_primary") or ""
+    if n1 and n1 != "***":
+        lines.append(f"👤 {n1}")
+    n2 = record.get("night_secondary") or ""
+    if n2 and n2 != "***":
+        lines.append(f"👤 {n2}")
     return lines
 
 

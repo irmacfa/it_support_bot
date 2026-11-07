@@ -18,6 +18,7 @@ import jdatetime
 from fastapi import FastAPI, Request, UploadFile, File, Form, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, bale_bot, schedule_store, schedule_times, usage_stats
@@ -29,6 +30,11 @@ app = FastAPI(title="IT Support Lookup Bot - Admin Panel")
 # صفحه‌ی /data چند مگابایت HTML برمی‌گردونه؛ بدون فشرده‌سازی، بارگذاریش کند می‌شه.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
+
+# فایل‌های استاتیک (فونت وزیرمتن، آیکون‌ها) — self-host شده تا به CDN خارجی نیاز نباشد.
+STATIC_DIR = config.BASE_DIR / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 SESSION_COOKIE = "panel_session"
 SESSION_TTL = timedelta(hours=12)
@@ -57,7 +63,7 @@ def _is_authed(request: Request) -> bool:
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     if _is_authed(request):
-        return RedirectResponse("/monitor", status_code=302)
+        return RedirectResponse("/dashboard", status_code=302)
     return templates.TemplateResponse("login.html", {"request": request, "message": None})
 
 
@@ -68,7 +74,7 @@ def login_submit(request: Request, password: str = Form(...)):
             "login.html", {"request": request, "message": "رمز عبور اشتباهه."}
         )
     token = _create_session()
-    resp = RedirectResponse("/monitor", status_code=302)
+    resp = RedirectResponse("/dashboard", status_code=302)
     resp.set_cookie(
         SESSION_COOKIE, token, httponly=True, samesite="lax",
         max_age=int(SESSION_TTL.total_seconds()),
@@ -88,10 +94,10 @@ def logout(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def root(request: Request):
-    """صفحه‌ی پیش‌فرض پنل: مانیتورینگ."""
+    """صفحه‌ی پیش‌فرض پنل: داشبورد."""
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
-    return RedirectResponse("/monitor", status_code=302)
+    return RedirectResponse("/dashboard", status_code=302)
 
 
 @app.get("/upload", response_class=HTMLResponse)
@@ -784,52 +790,41 @@ async def upload_schedule(request: Request, schedule_file: UploadFile = File(...
 
 @app.get("/schedule", response_class=HTMLResponse)
 def schedule_list_page(request: Request):
+    """صفحه‌ی اصلی «برنامه شیفت»: همه‌ی روزها با جستجو، مرتب‌سازی و دکمه‌ی ویرایش کنار هر روز."""
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
     return templates.TemplateResponse(
         "schedule_list.html",
-        {"request": request, "days": schedule_store.list_all(), "active": "schedule"},
+        {
+            "request": request,
+            "days": schedule_store.list_all(),
+            "today_jalali": jdatetime.date.today().strftime("%Y/%m/%d"),
+            "active": "schedule",
+        },
     )
 
 
-@app.get("/schedule/edit/{date:path}", response_class=HTMLResponse)
-def schedule_edit_page(request: Request, date: str):
+@app.post("/api/schedule/day")
+async def schedule_day_update(request: Request, payload: dict = Body(...)):
+    """ویرایش یک روز از برنامه شیفت از داخل مودال صفحه‌ی /schedule."""
     if not _is_authed(request):
-        return RedirectResponse("/login", status_code=302)
-    record = schedule_store.lookup(date)
-    return templates.TemplateResponse(
-        "schedule_edit.html",
-        {"request": request, "date": date, "record": record, "message": None, "success": None, "active": "schedule"},
-    )
+        return JSONResponse({"ok": False, "message": "نشست شما منقضی شده، دوباره وارد پنل بشید."}, status_code=401)
 
-
-@app.post("/schedule/edit/{date:path}", response_class=HTMLResponse)
-def schedule_edit_save(
-    request: Request,
-    date: str,
-    desk1: str = Form(""),
-    desk2: str = Form(""),
-    night_primary: str = Form(""),
-    night_secondary: str = Form(""),
-):
-    if not _is_authed(request):
-        return RedirectResponse("/login", status_code=302)
-
+    date = str(payload.get("date") or "").strip()
     record = schedule_store.update_day(
         date,
-        desk1=desk1.strip(),
-        desk2=desk2.strip(),
-        night_primary=night_primary.strip(),
-        night_secondary=night_secondary.strip(),
+        desk1=str(payload.get("desk1") or "").strip(),
+        desk2=str(payload.get("desk2") or "").strip(),
+        night_primary=str(payload.get("night_primary") or "").strip(),
+        night_secondary=str(payload.get("night_secondary") or "").strip(),
+        morning_shift=str(payload.get("morning_shift") or "").strip(),
+        evening_shift=str(payload.get("evening_shift") or "").strip(),
     )
-    if record:
-        bale_bot.notify_schedule_edited(record)
+    if record is None:
+        return JSONResponse({"ok": False, "message": "این تاریخ توی برنامه شیفت پیدا نشد."}, status_code=404)
 
-    message = "✅ شیفت این روز بروزرسانی شد." if record else "❌ این تاریخ توی برنامه شیفت پیدا نشد."
-    return templates.TemplateResponse(
-        "schedule_edit.html",
-        {"request": request, "date": date, "record": record, "message": message, "success": record is not None, "active": "schedule"},
-    )
+    bale_bot.notify_schedule_edited(record)
+    return JSONResponse({"ok": True, "message": "✅ شیفت این روز بروزرسانی شد.", "record": record})
 
 
 @app.post("/info/upload", response_class=HTMLResponse)
@@ -883,13 +878,63 @@ def _lookup_registered_name(user_id: str) -> str:
     return ""
 
 
+def _access_user_candidates() -> list[dict]:
+    """کاربرهای شناخته‌شده (ثبت‌نام‌شده + دیده‌شده توی گروه) برای لیست کشویی بخش‌های دسترسی."""
+    candidates: dict[str, dict] = {}
+
+    for u in registration.list_all():
+        uid = str(u.get("user_id") or "").strip()
+        if not uid:
+            continue
+        name = (u.get("full_name") or "").strip() or " ".join(
+            p for p in [u.get("first_name"), u.get("last_name")] if p
+        ).strip()
+        candidates[uid] = {"user_id": uid, "name": name, "username": (u.get("username") or "").strip()}
+
+    for m in group_members.list_all():
+        uid = str(m.get("user_id") or "").strip()
+        if not uid:
+            continue
+        name = (m.get("display_name") or "").strip()
+        username = (m.get("username") or "").strip()
+        if uid in candidates:
+            if not candidates[uid]["name"]:
+                candidates[uid]["name"] = name
+            if not candidates[uid]["username"]:
+                candidates[uid]["username"] = username
+        else:
+            candidates[uid] = {"user_id": uid, "name": name, "username": username}
+
+    result = []
+    for c in candidates.values():
+        if c["name"] and c["username"]:
+            label = f"{c['name']} (@{c['username']})"
+        elif c["name"]:
+            label = c["name"]
+        elif c["username"]:
+            label = f"@{c['username']}"
+        else:
+            label = c["user_id"]
+        c["label"] = label
+        result.append(c)
+    result.sort(key=lambda c: c["label"])
+    return result
+
+
+def _lookup_access_name(user_id: str) -> str:
+    for c in _access_user_candidates():
+        if c["user_id"] == str(user_id):
+            return c["name"] or (f"@{c['username']}" if c["username"] else "")
+    return ""
+
+
 @app.get("/charge-admins", response_class=HTMLResponse)
 def charge_admins_page(request: Request):
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
     return templates.TemplateResponse(
         "charge_admins.html",
-        {"request": request, "message": None, "admins": charge_admins.list_all(), "active": "charge_admins"},
+        {"request": request, "message": None, "admins": charge_admins.list_all(), "users": _access_user_candidates(), "active": "charge_admins"},
     )
 
 
@@ -902,13 +947,13 @@ def charge_admins_add(request: Request, user_id: str = Form(...), name: str = Fo
     if not user_id.isdigit():
         message = "❌ آیدی باید فقط عدد باشه."
     else:
-        display_name = name.strip() or _lookup_registered_name(user_id)
+        display_name = name.strip() or _lookup_access_name(user_id)
         charge_admins.add(user_id, display_name)
         message = f"✅ آیدی {user_id} به لیست مسئولین شارژ اضافه شد."
 
     return templates.TemplateResponse(
         "charge_admins.html",
-        {"request": request, "message": message, "admins": charge_admins.list_all(), "active": "charge_admins"},
+        {"request": request, "message": message, "admins": charge_admins.list_all(), "users": _access_user_candidates(), "active": "charge_admins"},
     )
 
 
@@ -920,7 +965,7 @@ def charge_admins_remove(request: Request, user_id: str = Form(...)):
     charge_admins.remove(user_id)
     return templates.TemplateResponse(
         "charge_admins.html",
-        {"request": request, "message": f"🗑 آیدی {user_id} حذف شد.", "admins": charge_admins.list_all(), "active": "charge_admins"},
+        {"request": request, "message": f"🗑 آیدی {user_id} حذف شد.", "admins": charge_admins.list_all(), "users": _access_user_candidates(), "active": "charge_admins"},
     )
 
 
@@ -930,7 +975,7 @@ def reset_admins_page(request: Request):
         return RedirectResponse("/login", status_code=302)
     return templates.TemplateResponse(
         "reset_admins.html",
-        {"request": request, "message": None, "admins": reset_admins.list_all(), "active": "reset_admins"},
+        {"request": request, "message": None, "admins": reset_admins.list_all(), "users": _access_user_candidates(), "active": "reset_admins"},
     )
 
 
@@ -943,13 +988,13 @@ def reset_admins_add(request: Request, user_id: str = Form(...), name: str = For
     if not user_id.isdigit():
         message = "❌ آیدی باید فقط عدد باشه."
     else:
-        display_name = name.strip() or _lookup_registered_name(user_id)
+        display_name = name.strip() or _lookup_access_name(user_id)
         reset_admins.add(user_id, display_name)
         message = f"✅ آیدی {user_id} به لیست مسئولین ریست رمز اضافه شد."
 
     return templates.TemplateResponse(
         "reset_admins.html",
-        {"request": request, "message": message, "admins": reset_admins.list_all(), "active": "reset_admins"},
+        {"request": request, "message": message, "admins": reset_admins.list_all(), "users": _access_user_candidates(), "active": "reset_admins"},
     )
 
 
@@ -961,7 +1006,7 @@ def reset_admins_remove(request: Request, user_id: str = Form(...)):
     reset_admins.remove(user_id)
     return templates.TemplateResponse(
         "reset_admins.html",
-        {"request": request, "message": f"🗑 آیدی {user_id} حذف شد.", "admins": reset_admins.list_all(), "active": "reset_admins"},
+        {"request": request, "message": f"🗑 آیدی {user_id} حذف شد.", "admins": reset_admins.list_all(), "users": _access_user_candidates(), "active": "reset_admins"},
     )
 
 
@@ -1064,6 +1109,34 @@ def _humanize_iso(iso: str | None) -> str:
     except (TypeError, ValueError):
         return "—"
     return jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d %H:%M")
+
+
+def _to_jalali(value) -> str:
+    """هر تاریخ/ساعت ذخیره‌شده (ISO یا «YYYY/MM/DD HH:MM:SS») رو به شمسی تبدیل می‌کنه."""
+    if value in (None, ""):
+        return ""
+    s = str(value).strip()
+    dt = None
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M",
+        "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M",
+        "%Y-%m-%d", "%Y/%m/%d",
+    ):
+        try:
+            dt = datetime.strptime(s, fmt)
+            break
+        except ValueError:
+            continue
+    if dt is None:
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            return s
+    jd = jdatetime.datetime.fromgregorian(datetime=dt)
+    return jd.strftime("%Y/%m/%d %H:%M") if ":" in s else jd.strftime("%Y/%m/%d")
+
+
+templates.env.filters["shamsi"] = _to_jalali
 
 
 def _build_monitor_users() -> list[dict]:
@@ -1421,6 +1494,11 @@ def _build_monitor_page() -> dict:
         "alerts": _monitor_alerts(mon),
         "load_ms": None,
     })
+    stores = mon.get("stores") or {}
+    if "covered_count" not in stores:
+        # مجموع فروشگاه‌های دارای کارشناس
+        stores["covered_count"] = sum(c for _, c in (stores.get("per_expert") or [])) or stores.get("assigned") or 0
+    mon["stores"] = stores
     return mon
 
 
@@ -1730,6 +1808,32 @@ def group_auth_remind(request: Request, chat_id: str = Form(...)):
     )
 
 
+@app.get("/closed-stores", response_class=HTMLResponse)
+def closed_stores_page(request: Request):
+    if not _is_authed(request):
+        return RedirectResponse("/login", status_code=302)
+
+    closed = info_store.closed_codes()
+    dir_rows, _ = info_store.get_directory_rows()
+    items = []
+    for r in dir_rows:
+        code = str(r.get(info_store.INFO_CODE_COL) or "").strip()
+        if code and code in closed:
+            items.append({
+                "code": code,
+                "name": str(r.get("فروشگاه") or r.get("نام فروشگاه") or "").strip(),
+                "region": str(r.get("منطقه نهائی") or r.get("منطقه فروش") or "").strip() or "نامشخص",
+            })
+    items.sort(key=lambda x: x["code"])
+
+    return templates.TemplateResponse("closed_stores.html", {
+        "request": request,
+        "active": "closed_stores",
+        "items": items,
+        "count": len(items),
+    })
+
+
 @app.get("/data", response_class=HTMLResponse)
 def data_browser_page(request: Request):
     if not _is_authed(request):
@@ -1744,19 +1848,6 @@ def data_browser_page(request: Request):
         if not group["rows"]:
             group["columns"] = columns
         group["rows"].append(r)
-
-    schedule_columns = ["تاریخ", "روز", "کارشناس اول دسک", "کارشناس دوم دسک", "کارشناس شب اول", "کارشناس شب دوم"]
-    schedule_rows = [
-        {
-            "تاریخ": r.get("date", ""),
-            "روز": r.get("day_name", ""),
-            "کارشناس اول دسک": r.get("desk1", ""),
-            "کارشناس دوم دسک": r.get("desk2", ""),
-            "کارشناس شب اول": r.get("night_primary", ""),
-            "کارشناس شب دوم": r.get("night_secondary", ""),
-        }
-        for r in schedule_store.list_all()
-    ]
 
     EXPERT_COL = info_store.EXPERT_COLUMN
     UNSET = info_store.EXPERT_UNSET
@@ -1805,6 +1896,40 @@ def data_browser_page(request: Request):
             unset_target["stores"].extend(g["stores"])
         else:
             merged.append(g)
+
+    # انتقال فروشگاه‌های بسته شده به بخش «فاقد کارشناس»
+    closed_codes_set = info_store.closed_codes()
+    if closed_codes_set:
+        existing_codes = set()
+        if unset_target:
+            for s in unset_target.get("stores", []):
+                c = str(s.get("code") or "").strip()
+                if c:
+                    existing_codes.add(c)
+        closed_items = []
+        for r in dir_rows:
+            code = str(r.get(info_store.INFO_CODE_COL) or "").strip()
+            if not code or code not in closed_codes_set:
+                continue
+            if code in existing_codes:
+                continue
+            closed_items.append({
+                "code": code,
+                "name": str(r.get("فروشگاه") or r.get("نام فروشگاه") or "").strip(),
+                "region": str(r.get("منطقه نهائی") or r.get("منطقه فروش") or "").strip() or "نامشخص",
+            })
+        if closed_items:
+            if unset_target is None:
+                unset_target = {"expert": UNSET, "count": 0, "stores": []}
+                merged.append(unset_target)
+            for it in closed_items:
+                unset_target["stores"].append(it)
+                existing_codes.add(it["code"])
+            unset_target["count"] = len(unset_target["stores"])
+
+    unassigned = sum(g["count"] for g in merged if g["expert"] == UNSET)
+    expert_names = sorted({r.get(EXPERT_COL, "") for r in dir_rows
+                           if r.get(EXPERT_COL) and r.get(EXPERT_COL) != UNSET})
     expert_groups = merged
 
     return templates.TemplateResponse(
@@ -1818,14 +1943,11 @@ def data_browser_page(request: Request):
             "directory_all_columns": info_store.get_directory_columns(),
             "directory_unassigned": unassigned,
             "expert_names": expert_names,
-            "expert_groups": expert_groups,
-            "expert_column": info_store.EXPERT_COLUMN,
-            "expert_unset": info_store.EXPERT_UNSET,
+        "expert_groups": merged,
+        "expert_column": info_store.EXPERT_COLUMN,
+        "expert_unset": info_store.EXPERT_UNSET,
             "region_rows": region_experts.regions(),
             "announce_group_title": ANNOUNCE_GROUP_TITLE,
-            "schedule_columns": schedule_columns,
-            "schedule_rows": schedule_rows,
-            "today_jalali": jdatetime.date.today().strftime("%Y/%m/%d"),
             "active": "data",
         },
     )
@@ -1833,7 +1955,15 @@ def data_browser_page(request: Request):
 
 @app.get("/monitor", response_class=HTMLResponse)
 def monitor_page(request: Request):
-    """صفحه‌ی مانیتورینگ مستقل — کاملاً جدا از آپلود و دیتا."""
+    """پایش زنده ادغام شده با داشبورد."""
+    if not _is_authed(request):
+        return RedirectResponse("/login", status_code=302)
+    return RedirectResponse("/dashboard", status_code=302)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page(request: Request):
+    """داشبورد جدید با کامپوننت‌های FarsiUI."""
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
 
@@ -1843,8 +1973,8 @@ def monitor_page(request: Request):
     payload["load_ms"] = int((_time.time() - t0) * 1000)
 
     return templates.TemplateResponse(
-        "monitor.html",
-        {"request": request, "monitor": payload, "active": "monitor"},
+        "dashboard.html",
+        {"request": request, "monitor": payload, "active": "dashboard"},
     )
 
 
@@ -1854,6 +1984,17 @@ def api_monitor_full(request: Request):
     if not _is_authed(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return JSONResponse(_build_monitor_page())
+
+
+@app.get("/components", response_class=HTMLResponse)
+def components_demo_page(request: Request):
+    """صفحه‌ی راهنمای کامپوننت‌ها: نمونه‌ی زنده‌ی farsiui.css."""
+    if not _is_authed(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        "components_demo.html",
+        {"request": request, "active": ""},
+    )
 
 
 @app.get("/api/monitor/stores", response_class=JSONResponse)

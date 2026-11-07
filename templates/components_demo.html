@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <title>راهنمای کامپوننت‌ها — پنل مدیریت</title>
+  {% include "_layout_head.html" %}
+</head>
+<body>
+  {% include "_sidebar.html" %}
+  <div class="main">
+    <div class="topbar">راهنمای کامپوننت‌ها (معادل FarsiUI)</div>
+    <div class="content">
+
+      <div class="fui-alert fui-alert--success" style="margin-bottom:20px;">
+        <span>این صفحه نمونه‌ی همه‌ی کامپوننت‌های <b>farsiui.css</b> است که به‌صورت CSS خالص از FarsiUI ترجمه شده‌اند. کلاس‌ها با پیشوند <code>fui-</code> هستند.</span>
+      </div>
+
+      <div class="cards-grid">
+        <div>
+          <h2>دکمه‌ها (Button)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+              <button class="fui-btn">پیش‌فرض</button>
+              <button class="fui-btn fui-btn--outline">خط‌دار</button>
+              <button class="fui-btn fui-btn--secondary">ثانویه</button>
+              <button class="fui-btn fui-btn--ghost">شفاف</button>
+              <button class="fui-btn fui-btn--destructive">حذف</button>
+              <button class="fui-btn fui-btn--link">لینک</button>
+              <button class="fui-btn" disabled>غیرفعال</button>
+            </div>
+            <div class="fui-card-content" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;border-top:1px solid var(--border);">
+              <button class="fui-btn fui-btn--sm">کوچک</button>
+              <button class="fui-btn">متوسط</button>
+              <button class="fui-btn fui-btn--lg">بزرگ</button>
+              <button class="fui-btn fui-btn--icon" title="آیکون">✏️</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>نشان‌ها (Badge)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content" style="display:flex;flex-wrap:wrap;gap:8px;">
+              <span class="fui-badge">پیش‌فرض</span>
+              <span class="fui-badge fui-badge--primary">اطلاع</span>
+              <span class="fui-badge fui-badge--success">فعال</span>
+              <span class="fui-badge fui-badge--warning">در انتظار</span>
+              <span class="fui-badge fui-badge--destructive">غیرفعال</span>
+              <span class="fui-badge fui-badge--outline">خط‌دار</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>فیلدهای ورودی (Input / Label / Field)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content">
+              <div class="fui-field">
+                <label class="fui-label" for="demo-name">نام کارشناس</label>
+                <input class="fui-input" id="demo-name" type="text" placeholder="مثلاً: علی قنبری">
+                <div class="fui-field-hint">نام کامل را وارد کنید.</div>
+              </div>
+              <div class="fui-field">
+                <label class="fui-label" for="demo-select">منطقه</label>
+                <select class="fui-select" id="demo-select">
+                  <option>شمال</option>
+                  <option>جنوب</option>
+                  <option>مرکز</option>
+                </select>
+              </div>
+              <div class="fui-field">
+                <label class="fui-label" for="demo-err">کد فروشگاه</label>
+                <input class="fui-input" id="demo-err" type="text" value="نامعتبر" aria-invalid="true">
+                <div class="fui-field-error">این کد معتبر نیست.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>هشدارها (Alert)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content" style="display:flex;flex-direction:column;gap:10px;">
+              <div class="fui-alert">اطلاعیه‌ی معمولی.</div>
+              <div class="fui-alert fui-alert--success">عملیات با موفقیت انجام شد.</div>
+              <div class="fui-alert fui-alert--destructive">خطا در ارتباط با سرور.</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>تب‌ها (Tabs)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content">
+              <div class="fui-tabs" role="tablist">
+                <button class="fui-tab" role="tab" aria-selected="true">همه</button>
+                <button class="fui-tab" role="tab" aria-selected="false">فعال</button>
+                <button class="fui-tab" role="tab" aria-selected="false">غیرفعال</button>
+              </div>
+            </div>
+          </div>
+          <h2>پیشرفت و اسپینر</h2>
+          <div class="fui-card">
+            <div class="fui-card-content" style="display:flex;flex-direction:column;gap:14px;">
+              <div class="fui-progress"><div class="fui-progress-bar" style="width:65%"></div></div>
+              <div style="display:flex;gap:14px;align-items:center;">
+                <span class="fui-spinner"></span>
+                <span class="fui-badge fui-badge--primary">در حال بارگذاری…</span>
+              </div>
+              <label class="fui-switch">
+                <input type="checkbox" checked>
+                <span class="fui-switch-track"></span>
+                <span class="fui-switch-thumb"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>جدول (Table)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content">
+              <div class="fui-table-wrap">
+                <table class="fui-table">
+                  <thead>
+                    <tr><th>تاریخ</th><th>کارشناس</th><th>وضعیت</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1405/07/01</td><td>عسگری</td>
+                      <td><span class="fui-badge fui-badge--success">فعال</span></td>
+                    </tr>
+                    <tr>
+                      <td>1405/07/02</td><td>باقدم</td>
+                      <td><span class="fui-badge fui-badge--warning">در انتظار</span></td>
+                    </tr>
+                    <tr>
+                      <td>1405/07/03</td><td class="fui-cell-ltr">@ghanbari1994</td>
+                      <td><span class="fui-badge fui-badge--destructive">غیرفعال</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>مودال (Dialog)</h2>
+          <div class="fui-card">
+            <div class="fui-card-content">
+              <button class="fui-btn fui-btn--outline" onclick="document.getElementById('demo-overlay').classList.remove('fui-overlay-hidden');document.getElementById('demo-overlay').style.display='';">نمایش مودال</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>حالت خالی (Empty)</h2>
+          <div class="fui-card">
+            <div class="fui-empty">
+              <div class="fui-empty-icon">📭</div>
+              <div class="fui-empty-title">داده‌ای یافت نشد</div>
+              <div class="fui-empty-desc">هنوز هیچ رکوردی ثبت نشده است.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="fui-overlay" id="demo-overlay" style="display:none;">
+    <div class="fui-dialog" role="dialog" aria-modal="true">
+      <div class="fui-dialog-header">
+        <div class="fui-dialog-title">ویرایش شیفت</div>
+        <div class="fui-dialog-description">مقادیر جدید را وارد کنید.</div>
+      </div>
+      <div class="fui-dialog-body">
+        <div class="fui-field">
+          <label class="fui-label">کارشناس دسک اول</label>
+          <input class="fui-input" type="text" value="عسگری">
+        </div>
+      </div>
+      <div class="fui-dialog-footer">
+        <button class="fui-btn">ذخیره</button>
+        <button class="fui-btn fui-btn--outline" onclick="document.getElementById('demo-overlay').style.display='none';">انصراف</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

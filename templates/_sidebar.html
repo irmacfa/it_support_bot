@@ -17,9 +17,9 @@
     <button type="button" class="stats-send-btn" onclick="sendGroupStats(this)">📤 ارسال به گروه</button>
   </div>
   <div class="nav-list">
-    <div class="nav-section">مانیتورینگ</div>
-    <a class="nav-item {{ 'active' if active == 'monitor' else '' }}" href="/monitor">
-      <span class="nav-icon">🩺</span> پایش زنده
+    <div class="nav-section">اصلی</div>
+    <a class="nav-item {{ 'active' if active == 'dashboard' else '' }}" href="/dashboard">
+      <span class="nav-icon">🏠</span> داشبورد
     </a>
 
     <div class="nav-section">آپلود فایل</div>
@@ -29,8 +29,10 @@
     <a class="nav-item {{ 'active' if active == 'data' else '' }}" href="/data">
       <span class="nav-icon">🗂</span> نمایش کامل دیتا
     </a>
-
-    <div class="nav-section">مدیریت کاربران</div>
+    <a class="nav-item {{ 'active' if active == 'schedule' else '' }}" href="/schedule">
+      <span class="nav-icon">🗓</span> برنامه شیفت
+    </a>
+<div class="nav-section">مدیریت کاربران</div>
     <a class="nav-item {{ 'active' if active == 'users' else '' }}" href="/users">
       <span class="nav-icon">👥</span> کاربران عضو‌شده
     </a>
@@ -53,9 +55,6 @@
     </a>
     <a class="nav-item {{ 'active' if active == 'schedule_times' else '' }}" href="/schedule-times">
       <span class="nav-icon">⏰</span> ساعت اطلاعیه
-    </a>
-    <a class="nav-item {{ 'active' if active == 'schedule' else '' }}" href="/schedule">
-      <span class="nav-icon">🗓</span> ویرایش شیفت
     </a>
   </div>
   <div class="sidebar-foot">

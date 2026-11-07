@@ -20,13 +20,14 @@
         <div class="card">
             <h2 style="margin-top:0;">افزودن مسئول جدید</h2>
             <form class="add-form" method="post" action="/charge-admins/add">
-                <div>
-                    <label>آیدی عددی بله</label>
-                    <input type="text" name="user_id" placeholder="مثلاً 839577721" required>
-                </div>
-                <div>
-                    <label>نام (اختیاری)</label>
-                    <input type="text" name="name" placeholder="اگه ثبت‌نام کرده خودکار پر میشه">
+                <div style="flex:1;min-width:260px;">
+                    <label>انتخاب کاربر از لیست</label>
+                    <select name="user_id" required>
+                        <option value="">— انتخاب نام —</option>
+                        {% for u in users %}
+                        <option value="{{ u.user_id }}">{{ u.label }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <button type="submit">➕ افزودن</button>
             </form>
@@ -48,7 +49,7 @@
                     <tr>
                         <td>{{ a.name or "-" }}</td>
                         <td>{{ a.user_id }}</td>
-                        <td>{{ a.added_at or "-" }}</td>
+                        <td>{{ a.added_at | shamsi or "-" }}</td>
                         <td>
                             <form method="post" action="/charge-admins/remove" style="margin:0;">
                                 <input type="hidden" name="user_id" value="{{ a.user_id }}">

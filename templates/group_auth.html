@@ -104,7 +104,7 @@
                         <td>{{ ("@" ~ m.username) if m.username else "-" }}</td>
                         <td>{{ m.user_id }}</td>
                         <td>{{ m.status_label }}</td>
-                        <td>{{ m.last_seen or "-" }}</td>
+                        <td>{{ m.last_seen | shamsi or "-" }}</td>
                         <td>
                             {% if m.status_key != "unregistered" %}
                             <button class="edit-btn" onclick='openEdit({{ {"user_id": m.user_id, "full_name": m.full_name, "first_name": m.first_name, "last_name": m.last_name} | tojson }})'>ویرایش</button>
@@ -160,7 +160,7 @@
                         <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
                         <td>{{ u.user_id }}</td>
                         <td>{{ u.status_label }}</td>
-                        <td>{{ u.registered_at or "-" }}</td>
+                        <td>{{ u.registered_at | shamsi or "-" }}</td>
                         <td>
                             <button class="edit-btn" onclick='openEdit({{ {"user_id": u.user_id, "full_name": u.full_name, "first_name": u.first_name, "last_name": u.last_name} | tojson }})'>ویرایش</button>
                         </td>

@@ -90,7 +90,7 @@
                         <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
                         <td>{{ ("@" ~ u.username) if u.username else "-" }}</td>
                         <td>{{ u.user_id }}</td>
-                        <td>{{ u.registered_at or "-" }}</td>
+                        <td>{{ u.registered_at | shamsi or "-" }}</td>
                         <td style="white-space:nowrap;">
                             <button class="btn-approve" onclick="approveUser('{{ u.user_id }}', this)">✅ تایید</button>
                             <button class="btn-reject" onclick="rejectUser('{{ u.user_id }}', this)">❌ رد</button>
@@ -126,7 +126,7 @@
                         <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
                         <td>{{ ("@" ~ u.username) if u.username else "-" }}</td>
                         <td>{{ u.user_id }}</td>
-                        <td>{{ u.registered_at or "-" }}</td>
+                        <td>{{ u.registered_at | shamsi or "-" }}</td>
                         <td>
                             {% if u.get("approved", False) %}
                             <span class="badge-approved">تایید شده</span>

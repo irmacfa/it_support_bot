@@ -151,7 +151,7 @@
                             {% if c.actions.get("info") %}<span class="badge-count">اطلاعات: {{ c.actions.info }}</span>{% endif %}
                             {% if c.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ c.actions.reset }}</span>{% endif %}
                         </td>
-                        <td>{{ c.last_requested_at or "-" }}</td>
+                        <td>{{ c.last_requested_at | shamsi or "-" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -206,7 +206,7 @@
                         <td>{{ a.responded_count }}</td>
                         <td>{{ a.noissue_count }} / {{ a.done_count }}</td>
                         <td>{{ a.avg_response }}</td>
-                        <td>{{ a.last_response_at or "هنوز پاسخی نداده" }}</td>
+                        <td>{{ a.last_response_at | shamsi or "هنوز پاسخی نداده" }}</td>
                         <td>
                             {% if a.user_id == top_admin_id %}
                             <span class="badge-top">🏆 فعال‌ترین</span>
@@ -246,7 +246,7 @@
                         <td>{{ a.responded_count }}</td>
                         <td>{{ a.done_count }} / {{ a.wrong_count }}</td>
                         <td>{{ a.avg_response }}</td>
-                        <td>{{ a.last_response_at or "هنوز پاسخی نداده" }}</td>
+                        <td>{{ a.last_response_at | shamsi or "هنوز پاسخی نداده" }}</td>
                         <td>
                             {% if a.user_id == top_reset_admin_id %}
                             <span class="badge-top">🏆 فعال‌ترین</span>
@@ -288,7 +288,7 @@
                             {% if u.actions.get("shift") %}<span class="badge-count">شیفت: {{ u.actions.shift }}</span>{% endif %}
                             {% if u.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ u.actions.reset }}</span>{% endif %}
                         </td>
-                        <td>{{ u.last_action_at or "-" }}</td>
+                        <td>{{ u.last_action_at | shamsi or "-" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -320,7 +320,7 @@
                         <td>{{ (u.first_name ~ " " ~ u.last_name).strip() or "-" }}</td>
                         <td>{{ ("@" ~ u.username) if u.username else "-" }}</td>
                         <td>{{ u.user_id }}</td>
-                        <td>{{ u.registered_at or "-" }}</td>
+                        <td>{{ u.registered_at | shamsi or "-" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

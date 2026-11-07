@@ -2,26 +2,47 @@
 <html lang="fa" dir="rtl">
 <head>
 {% include "_layout_head.html" %}
-<title>ویرایش شیفت | پنل مدیریت</title>
+<title>برنامه شیفت | پنل مدیریت</title>
+<style>
+.search-row { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.search-row .fui-input { max-width: 340px; }
+.row-count { font-size: 0.8rem; color: var(--fui-muted-foreground); }
+.schedule-table th, .schedule-table td { white-space: nowrap; }
+.shift-default { color: var(--fui-muted-foreground); }
+tr.past-row td {
+  color: var(--fui-muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--fui-destructive);
+  text-decoration-thickness: 2px;
+  opacity: 0.6;
+}
+tr.today-row td { background: color-mix(in srgb, var(--fui-primary) 10%, transparent); }
+</style>
 </head>
 <body>
 {% include "_sidebar.html" %}
 <div class="main">
-    <div class="topbar">ویرایش شیفت</div>
+    <div class="topbar">برنامه شیفت</div>
     <div class="content">
-        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
-            روزهای برنامه شیفتِ بارگذاری‌شده (از فایل PDF استخراج شده). با زدن «ویرایش» می‌تونی کارشناس‌های یه روز خاص رو مستقیم عوض کنی، بدون آپلود دوباره فایل.
+        <p style="font-size:0.82rem;color:var(--fui-muted-foreground);margin-bottom:16px;">
+            روزهای برنامه شیفتِ بارگذاری‌شده (از فایل PDF استخراج شده). روزهای گذشته با خط قرمز مشخص و به پایین جدول رانده می‌شن؛ امروز و آینده بالا هستن. با زدن «ویرایش» کنار هر روز، کارشناس‌های همون روز رو مستقیم عوض کن، بدون آپلود دوباره فایل. فایل PDF جدید از صفحه‌ی <a href="/upload">فایل شارژ و اطلاعات</a> آپلود می‌شه.
         </p>
 
         {% if days %}
-        <div class="table-wrap">
-        <table>
+        <div class="search-row">
+            <input class="fui-input" type="text" placeholder="جستجو در تاریخ، روز یا نام کارشناس..." oninput="filterSchedule(this.value)">
+            <span class="fui-badge fui-badge--primary" id="schedule-count">{{ days | length }} روز</span>
+        </div>
+        <div class="fui-table-wrap">
+        <table class="fui-table schedule-table" id="schedule-table">
             <thead>
                 <tr>
                     <th>تاریخ</th>
                     <th>روز</th>
                     <th>دسک اول</th>
                     <th>دسک دوم</th>
+                    <th>شیفت صبح</th>
+                    <th>شیفت عصر</th>
                     <th>شیفت شب اول</th>
                     <th>شیفت شب دوم</th>
                     <th></th>
@@ -29,23 +50,190 @@
             </thead>
             <tbody>
                 {% for d in days %}
-                <tr>
+                <tr data-date="{{ d.date }}">
                     <td>{{ d.date }}</td>
                     <td>{{ d.day_name }}</td>
                     <td>{{ d.desk1 or '-' }}</td>
                     <td>{{ d.desk2 or '-' }}</td>
+                    <td>{% if d.morning_shift %}{{ d.morning_shift }}{% else %}<span class="shift-default">۰۷:۳۰ - ۱۵:۰۰</span>{% endif %}</td>
+                    <td>{% if d.evening_shift %}{{ d.evening_shift }}{% else %}<span class="shift-default">۱۵:۰۰ - ۲۳:۰۰</span>{% endif %}</td>
                     <td>{{ d.night_primary or '-' }}</td>
                     <td>{{ d.night_secondary or '-' }}</td>
-                    <td><a href="/schedule/edit/{{ d.date }}">✏️ ویرایش</a></td>
+                    <td><button type="button" class="fui-btn fui-btn--outline fui-btn--sm"
+                            onclick="openEdit('{{ d.date }}')">✏️ ویرایش</button></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         </div>
         {% else %}
-        <div class="empty">هنوز هیچ فایل شیفتی آپلود نشده.</div>
+        <div class="fui-empty">
+            <div class="fui-empty-icon">📭</div>
+            <div class="fui-empty-title">هنوز هیچ فایل شیفتی آپلود نشده</div>
+            <div class="fui-empty-desc">از صفحه‌ی «فایل شارژ و اطلاعات» PDF برنامه شیفت را بارگذاری کنید.</div>
+        </div>
         {% endif %}
     </div>
 </div>
+
+<!-- ==== مودال ویرایش یک روز (کامپوننت Dialog) ==== -->
+<div class="fui-overlay" id="editOverlay">
+  <div class="fui-dialog" role="dialog" aria-modal="true" aria-labelledby="editDialogTitle">
+    <div class="fui-dialog-header">
+      <div class="fui-dialog-title" id="editDialogTitle">✏️ ویرایش شیفت</div>
+      <div class="fui-dialog-description">کارشناسان هر نوبت را وارد کنید. خالی گذاشتن یک نوبت یعنی بدون کارشناس.</div>
+    </div>
+    <div class="fui-dialog-body">
+      <div class="fui-field">
+        <label class="fui-label" for="editDesk1">کارشناس اول سرویس دسک</label>
+        <input class="fui-input" type="text" id="editDesk1">
+      </div>
+      <div class="fui-field">
+        <label class="fui-label" for="editDesk2">کارشناس دوم سرویس دسک</label>
+        <input class="fui-input" type="text" id="editDesk2">
+      </div>
+      <div class="fui-field">
+        <label class="fui-label" for="editMorning">شیفت صبح</label>
+        <input class="fui-input" type="text" id="editMorning" placeholder="۰۷:۳۰ - ۱۵:۰۰">
+      </div>
+      <div class="fui-field">
+        <label class="fui-label" for="editEvening">شیفت عصر</label>
+        <input class="fui-input" type="text" id="editEvening" placeholder="۱۵:۰۰ - ۲۳:۰۰">
+      </div>
+      <div class="fui-field">
+        <label class="fui-label" for="editNight1">کارشناس شیفت شب (اول)</label>
+        <input class="fui-input" type="text" id="editNight1">
+      </div>
+      <div class="fui-field" style="margin-bottom:0;">
+        <label class="fui-label" for="editNight2">کارشناس شیفت شب (دوم)</label>
+        <input class="fui-input" type="text" id="editNight2">
+      </div>
+    </div>
+    <div class="fui-dialog-footer" style="justify-content:flex-end;">
+      <span class="fui-field-hint" id="editStatus" style="margin-inline-end:auto;"></span>
+      <button type="button" class="fui-btn fui-btn--outline" onclick="closeEdit()">انصراف</button>
+      <button type="button" class="fui-btn" id="editSaveBtn" onclick="saveEdit()">💾 ذخیره</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TODAY_JALALI = {{ (today_jalali or "") | tojson }};
+let editingDate = null;
+
+/* مرتب‌سازی: امروز/آینده بالا (صعودی)، گذشته پایین (نزولی، نزدیک‌ترینِ گذشته اول) */
+function initScheduleTable() {
+  const table = document.getElementById('schedule-table');
+  if (!table) return;
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+
+  rows.forEach(row => {
+    const d = row.dataset.date || '';
+    if (d && d < TODAY_JALALI) row.classList.add('past-row');
+    if (d && d === TODAY_JALALI) row.classList.add('today-row');
+  });
+
+  rows.sort((a, b) => {
+    const da = a.dataset.date || '';
+    const db = b.dataset.date || '';
+    const aPast = da && da < TODAY_JALALI;
+    const bPast = db && db < TODAY_JALALI;
+    if (aPast !== bPast) return aPast ? 1 : -1;
+    return aPast ? db.localeCompare(da) : da.localeCompare(db);
+  });
+
+  rows.forEach(row => tbody.appendChild(row));
+}
+
+function filterSchedule(query) {
+  const table = document.getElementById('schedule-table');
+  if (!table) return;
+  const q = query.trim().toLowerCase();
+  const rows = table.tBodies[0].rows;
+  let visible = 0;
+  for (const row of rows) {
+    const match = !q || row.textContent.toLowerCase().includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) visible++;
+  }
+  const counter = document.getElementById('schedule-count');
+  if (counter) counter.textContent = visible + ' روز';
+}
+
+function rowCells(date) {
+  const table = document.getElementById('schedule-table');
+  if (!table) return null;
+  return Array.from(table.tBodies[0].rows).find(r => r.dataset.date === date) || null;
+}
+
+function openEdit(date) {
+  const row = rowCells(date);
+  if (!row) return;
+  editingDate = date;
+  document.getElementById('editDialogTitle').textContent = '✏️ ویرایش شیفت ' + date;
+  document.getElementById('editDesk1').value = row.cells[2].textContent.trim() === '-' ? '' : row.cells[2].textContent.trim();
+  document.getElementById('editDesk2').value = row.cells[3].textContent.trim() === '-' ? '' : row.cells[3].textContent.trim();
+  document.getElementById('editMorning').value = (row.cells[4].textContent.trim() === '-' || row.cells[4].textContent.trim() === '') ? '۰۷:۳۰ - ۱۵:۰۰' : row.cells[4].textContent.trim();
+  document.getElementById('editEvening').value = (row.cells[5].textContent.trim() === '-' || row.cells[5].textContent.trim() === '') ? '۱۵:۰۰ - ۲۳:۰۰' : row.cells[5].textContent.trim();
+  document.getElementById('editNight1').value = row.cells[6].textContent.trim() === '-' ? '' : row.cells[6].textContent.trim();
+  document.getElementById('editNight2').value = row.cells[7].textContent.trim() === '-' ? '' : row.cells[7].textContent.trim();
+  document.getElementById('editStatus').textContent = '';
+  document.getElementById('editSaveBtn').disabled = false;
+  document.getElementById('editOverlay').classList.add('active');
+}
+
+function closeEdit() {
+  document.getElementById('editOverlay').classList.remove('active');
+  editingDate = null;
+}
+
+async function saveEdit() {
+  if (!editingDate) return;
+  const btn = document.getElementById('editSaveBtn');
+  const status = document.getElementById('editStatus');
+  btn.disabled = true;
+  status.textContent = 'در حال ذخیره...';
+  const resp = await fetch('/api/schedule/day', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      date: editingDate,
+      desk1: document.getElementById('editDesk1').value.trim(),
+      desk2: document.getElementById('editDesk2').value.trim(),
+      morning_shift: document.getElementById('editMorning').value.trim(),
+      evening_shift: document.getElementById('editEvening').value.trim(),
+      night_primary: document.getElementById('editNight1').value.trim(),
+      night_secondary: document.getElementById('editNight2').value.trim()
+    })
+  });
+  const res = await resp.json();
+  if (!res.ok) {
+    status.textContent = res.message || 'خطا در ذخیره.';
+    btn.disabled = false;
+    return;
+  }
+  const row = rowCells(editingDate);
+  if (row && res.record) {
+    const rec = res.record;
+    row.cells[2].textContent = rec.desk1 || '-';
+    row.cells[3].textContent = rec.desk2 || '-';
+    row.cells[4].textContent = rec.morning_shift || '-';
+    row.cells[5].textContent = rec.evening_shift || '-';
+    row.cells[6].textContent = rec.night_primary || '-';
+    row.cells[7].textContent = rec.night_secondary || '-';
+  }
+  status.textContent = res.message || 'ذخیره شد.';
+  setTimeout(closeEdit, 700);
+}
+
+document.getElementById('editOverlay')?.addEventListener('click', function (e) {
+  if (e.target === this) closeEdit();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeEdit();
+});
+document.addEventListener('DOMContentLoaded', initScheduleTable);
+</script>
 </body>
 </html>

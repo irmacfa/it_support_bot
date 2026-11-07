@@ -102,6 +102,8 @@ def update_day(
     desk2: str | None = None,
     night_primary: str | None = None,
     night_secondary: str | None = None,
+    morning_shift: str | None = None,
+    evening_shift: str | None = None,
 ) -> dict | None:
     """یه روز خاص از برنامه شیفت رو مستقیم ویرایش می‌کنه (مثلاً جابجایی دو نفر)، بدون نیاز به آپلود دوباره PDF."""
     with _lock:
@@ -117,6 +119,10 @@ def update_day(
             record["night_primary"] = night_primary
         if night_secondary is not None:
             record["night_secondary"] = night_secondary
+        if morning_shift is not None:
+            record["morning_shift"] = morning_shift
+        if evening_shift is not None:
+            record["evening_shift"] = evening_shift
         _save()
         return record
 

@@ -55,4 +55,16 @@ def list_for_chat(chat_id) -> list[dict]:
         return list(_members.get(str(chat_id), {}).values())
 
 
+def list_all() -> list[dict]:
+    """همه‌ی اعضای دیده‌شده توی همه‌ی گروه‌ها (بدون تکرار)."""
+    with _lock:
+        _load()
+        seen: dict[str, dict] = {}
+        for chat_members in _members.values():
+            for ukey, member in chat_members.items():
+                if ukey not in seen:
+                    seen[ukey] = member
+        return list(seen.values())
+
+
 _load()

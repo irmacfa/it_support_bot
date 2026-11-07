@@ -25,13 +25,6 @@ table.data-table th {
 table.data-table th:hover { color: var(--accent); }
 table.data-table th .sort-arrow { position: absolute; left: 8px; opacity: 0.5; }
 table.data-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
-tr.past-row td {
-  color: var(--muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--red);
-  text-decoration-thickness: 2px;
-  opacity: 0.6;
-}
 .unset-expert { color: var(--yellow); font-weight: 600; }
 
 /* ==== انتخاب ستون‌های فهرست فروشگاه‌ها ==== */
@@ -135,13 +128,14 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
     <div class="topbar">نمایش کامل دیتا</div>
     <div class="content">
         <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
-            همه‌ی ردیف‌ها و ستون‌های فایل‌های اکسل آپلودشده، دقیقاً همون‌طور که تو فایل هست. یه جدول رو از دکمه‌های زیر انتخاب کن، تو هر جدول می‌تونی سرچ کنی، و با کلیک روی سرستون‌ها مرتبش کنی. تو جدول شیفت، تاریخ‌های گذشته با خط قرمز مشخص و به پایین جدول رانده می‌شن.
+            همه‌ی ردیف‌ها و ستون‌های فایل‌های اکسل آپلودشده، دقیقاً همون‌طور که تو فایل هست. یه جدول رو از دکمه‌های زیر انتخاب کن، تو هر جدول می‌تونی سرچ کنی، و با کلیک روی سرستون‌ها مرتبش کنی.
         </p>
 
-        {% if store_groups or info_groups or schedule_rows or directory_rows %}
+        {% if store_groups or info_groups or directory_rows %}
         <div class="tabs-row">
             {% if directory_rows %}
             <button type="button" class="tab-btn {{ 'active' if not store_groups else '' }}" onclick="showTab('panel-directory', this)">🗂 فهرست کامل فروشگاه‌ها ({{ directory_rows | length }})</button>
+            <button type="button" class="tab-btn" onclick="showTab('panel-closed', this)">🔒 فروشگاه‌های بسته شده ({{ closed_count }})</button>
             {% endif %}
             {% if expert_groups %}
             <button type="button" class="tab-btn {{ 'active' if not store_groups and not directory_rows else '' }}" onclick="showTab('panel-experts', this)">👤 لیست کارشناسان ({{ expert_groups | length }})</button>
@@ -151,9 +145,6 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
             {% endfor %}
             {% if info_groups %}
             <button type="button" class="tab-btn {{ 'active' if not store_groups and not directory_rows else '' }}" onclick="showTab('panel-info', this)">📋 اطلاعات فروشگاه‌ها</button>
-            {% endif %}
-            {% if schedule_rows %}
-            <button type="button" class="tab-btn {{ 'active' if not store_groups and not info_groups and not directory_rows else '' }}" onclick="showTab('panel-schedule', this)">🗓 برنامه شیفت ({{ schedule_rows | length }})</button>
             {% endif %}
         </div>
 
@@ -348,38 +339,6 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
             {% endfor %}
         </div>
         {% endif %}
-
-{% if schedule_rows %}
-        <div class="tab-panel {{ 'active' if not store_groups and not info_groups else '' }}" id="panel-schedule">
-            <div class="card">
-                <div class="search-row">
-                    <input type="text" placeholder="جستجو..." oninput="filterTable('schedule-table', this.value)">
-                    <span class="row-count" id="schedule-table-count">{{ schedule_rows | length }} ردیف نمایش داده می‌شه</span>
-                    <a href="/schedule" style="font-size:0.82rem;">🗓 ویرایش برنامه شیفت</a>
-                </div>
-                <div class="table-wrap">
-                <table class="data-table" id="schedule-table">
-                    <thead>
-                        <tr>
-                            {% for col in schedule_columns %}
-                            <th onclick="sortTable('schedule-table', {{ loop.index0 }}, this)">{{ col }}<span class="sort-arrow"></span></th>
-                            {% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in schedule_rows %}
-                        <tr data-date="{{ row.get('تاریخ', '') }}">
-                            {% for col in schedule_columns %}
-                            <td>{{ row.get(col, "") or "-" }}</td>
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                </div>
-            </div>
-        </div>
-        {% endif %}
         {% else %}
         <div class="empty">هنوز هیچ فایلی آپلود نشده.</div>
         {% endif %}
@@ -387,8 +346,6 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
 </div>
 
 <script>
-const TODAY_JALALI = {{ (today_jalali or "") | tojson }};
-
 function showTab(panelId, btn) {
   const panel = document.getElementById(panelId);
   if (!panel) return;
@@ -448,32 +405,6 @@ function sortTable(tableId, colIndex, thEl) {
   });
   thEl.classList.add('sorted');
   thEl.querySelector('.sort-arrow').textContent = dir === 'asc' ? '▲' : '▼';
-}
-
-function initScheduleTable() {
-  const table = document.getElementById('schedule-table');
-  if (!table || !TODAY_JALALI) return;
-  const tbody = table.tBodies[0];
-  const rows = Array.from(tbody.rows);
-
-  rows.forEach(row => {
-    const d = row.dataset.date || '';
-    if (d && d < TODAY_JALALI) {
-      row.classList.add('past-row');
-    }
-  });
-
-  // آینده/امروز بالا (صعودی)، گذشته پایین (نزولی، نزدیک‌ترینِ گذشته اول)
-  rows.sort((a, b) => {
-    const da = a.dataset.date || '';
-    const db = b.dataset.date || '';
-    const aPast = da && da < TODAY_JALALI;
-    const bPast = db && db < TODAY_JALALI;
-    if (aPast !== bPast) return aPast ? 1 : -1;
-    return aPast ? db.localeCompare(da) : da.localeCompare(db);
-  });
-
-  rows.forEach(row => tbody.appendChild(row));
 }
 
 /* ==== فهرست یکپارچه‌ی فروشگاه‌ها: انتخاب ستون و فیلتر «تعیین نشده» ==== */
@@ -795,8 +726,6 @@ async function doRenameExpert(idx, current) {
   alert(res.message);
   location.reload();
 }
-
-document.addEventListener('DOMContentLoaded', initScheduleTable);
 </script>
 <!-- ==== انتخاب ستون‌های فهرست فروشگاه‌ها ==== -->
 <div class="col-picker-overlay" id="colPickerOverlay">

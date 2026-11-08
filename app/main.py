@@ -1800,6 +1800,80 @@ def _build_range_usage_data(from_date: str, to_date: str) -> tuple[list[dict], d
     return range_users, top_charge_requester, top_reset_requester, range_codes
 
 
+def _build_usage_overview(from_date: str, to_date: str) -> dict:
+    """آمار دوره‌ای کاربران و حضور پیام‌رسان را برای صفحه‌ی گزارش آماده می‌کند."""
+    period_stats = usage_stats.range_user_stats(from_date, to_date)
+    all_stats = usage_stats.all_user_stats()
+    registered_users = registration.list_all()
+    registered_by_id = {
+        str(user.get("user_id") or ""): user
+        for user in registered_users
+        if user.get("user_id")
+    }
+    # Usage history may outlive registration records; include every recorded ID
+    # so historical requests are not silently omitted from rankings or totals.
+    all_user_ids = set(registered_by_id) | set(period_stats) | set(all_stats)
+    users = []
+    for uid in sorted(all_user_ids):
+        user = registered_by_id.get(uid, {})
+        period = period_stats.get(uid, {})
+        lifetime = all_stats.get(uid, {})
+        users.append({
+            **user,
+            "user_id": uid,
+            "full_name": user.get("full_name") or f"کاربر {uid}",
+            "total": period.get("total", 0),
+            "actions": period.get("actions", {}),
+            "last_action_at": lifetime.get("last_action_at"),
+            "lifetime_total": lifetime.get("total", 0),
+        })
+
+    active = [user for user in users if user["total"] > 0]
+    # Only currently registered users belong in the no-usage count.
+    inactive = [
+        user for uid, user in registered_by_id.items()
+        if period_stats.get(uid, {}).get("total", 0) == 0
+    ]
+    active.sort(key=lambda user: (-user["total"], user.get("full_name") or ""))
+    least_active = sorted(active, key=lambda user: (user["total"], user.get("full_name") or ""))
+
+    action_totals = {"charge": 0, "info": 0, "reset": 0, "shift": 0}
+    for user in users:
+        for action, count in (user.get("actions") or {}).items():
+            action_totals[action] = action_totals.get(action, 0) + count
+    presence_rows = []
+    for uid, row in presence.snapshot().items():
+        registered = registered_by_id.get(str(uid), {})
+        presence_rows.append({
+            "user_id": str(uid),
+            "full_name": registered.get("full_name") or row.get("display_name") or f"کاربر {uid}",
+            "username": registered.get("username") or row.get("username") or "",
+            "messages": row.get("messages", 0),
+            "today_messages": row.get("today", 0),
+            "week_messages": row.get("week", 0),
+            "sources": row.get("sources") or {},
+            "last_seen": row.get("last_seen"),
+            "state": row.get("state", "unseen"),
+            "state_label": STATE_LABELS.get(row.get("state"), ("نامشخص", "⚪"))[0],
+        })
+    presence_rows.sort(key=lambda row: (-row["messages"], row["full_name"]))
+
+    return {
+        "period_top_users": active[:10],
+        "period_low_users": least_active[:10],
+        "period_inactive_count": len(inactive),
+        "period_active_count": len(active),
+        "period_total_actions": sum(action_totals.values()),
+        "period_action_totals": action_totals,
+        "registered_count": len(registered_users),
+        "approved_count": sum(1 for user in registered_users if user.get("approved")),
+        "presence_rows": presence_rows[:15],
+        "presence_total_messages": sum(row["messages"] for row in presence_rows),
+        "presence_users_count": len(presence_rows),
+        "presence_counts": presence.state_counts(),
+    }
+
+
 @app.get("/usage", response_class=HTMLResponse)
 def usage_page(request: Request, from_date: str = "", to_date: str = ""):
     if not _is_authed(request):
@@ -1812,11 +1886,13 @@ def usage_page(request: Request, from_date: str = "", to_date: str = ""):
     to_date = to_date.strip() or default_to
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
     top_codes = _enrich_code_stats(usage_stats.all_code_stats())
+    overview = _build_usage_overview(from_date, to_date)
 
     return templates.TemplateResponse(
         "usage.html",
         {
             "request": request,
+            **overview,
             "active_users": active_users,
             "inactive_users": inactive_users,
             "admins": admins,
@@ -1840,7 +1916,7 @@ def usage_page(request: Request, from_date: str = "", to_date: str = ""):
 
 
 @app.post("/usage/send", response_class=HTMLResponse)
-def usage_send(request: Request, chat_id: str = Form(...)):
+def usage_send(request: Request, chat_id: str = Form(...), from_date: str = Form(""), to_date: str = Form("")):
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
 
@@ -1854,14 +1930,18 @@ def usage_send(request: Request, chat_id: str = Form(...)):
         msg_id = bale_bot.send_message(target["chat_id"], text)
         message = "✅ گزارش به گروه ارسال شد." if msg_id is not None else "❌ ارسال گزارش ناموفق بود."
 
-    from_date, to_date = _default_week_range()
+    default_from, default_to = _default_week_range()
+    from_date = from_date.strip() or default_from
+    to_date = to_date.strip() or default_to
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
     top_codes = _enrich_code_stats(usage_stats.all_code_stats())
+    overview = _build_usage_overview(from_date, to_date)
 
     return templates.TemplateResponse(
         "usage.html",
         {
             "request": request,
+            **overview,
             "active_users": active_users,
             "inactive_users": inactive_users,
             "admins": admins,
@@ -1871,8 +1951,8 @@ def usage_send(request: Request, chat_id: str = Form(...)):
             "groups": groups.list_all(),
             "from_date": from_date,
             "to_date": to_date,
-            "default_from": from_date,
-            "default_to": to_date,
+            "default_from": default_from,
+            "default_to": default_to,
             "range_users": range_users,
             "top_charge_requester": top_charge_requester,
             "top_reset_requester": top_reset_requester,

@@ -18,6 +18,15 @@
   font-size: 0.95rem; font-weight: 600; color: var(--text);
   margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
 }
+.usage-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 0 22px; }
+.usage-kpi { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; min-width:0; }
+.usage-kpi .value { font-size:1.45rem; font-weight:700; margin-top:5px; color:var(--text); }
+.usage-kpi .caption { color:var(--muted); font-size:.8rem; }
+.usage-rank-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:14px 0 22px; }
+.usage-rank-grid .card { min-width:0; }
+.usage-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 18px; }
+.usage-note { color:var(--muted); font-size:.8rem; line-height:1.8; margin:8px 0 14px; }
+@media(max-width:760px) { .usage-rank-grid { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -29,6 +38,25 @@
         {% if message %}
         <div class="msg {{ 'success' if '✅' in message else 'error' }}">{{ message }}</div>
         {% endif %}
+
+        <div class="usage-kpis">
+            <div class="usage-kpi"><div class="caption">کل درخواست قابلیت‌ها در بازه</div><div class="value">{{ period_total_actions }}</div></div>
+            <div class="usage-kpi"><div class="caption">کاربران فعال در بازه</div><div class="value">{{ period_active_count }}</div></div>
+            <div class="usage-kpi"><div class="caption">بدون استفاده در بازه</div><div class="value">{{ period_inactive_count }}</div></div>
+            <div class="usage-kpi"><div class="caption">کاربران ثبت‌نام‌شده</div><div class="value">{{ registered_count }}</div></div>
+            <div class="usage-kpi"><div class="caption">کاربران تاییدشده</div><div class="value">{{ approved_count }}</div></div>
+            <div class="usage-kpi"><div class="caption">پیام‌های ثبت‌شده</div><div class="value">{{ presence_total_messages }}</div></div>
+        </div>
+        <div class="card" style="margin-bottom:22px;">
+            <div class="section-title">تفکیک درخواست قابلیت‌ها در بازه انتخابی</div>
+            <div class="usage-actions">
+                <span class="badge-count">شارژ: {{ period_action_totals.get("charge", 0) }}</span>
+                <span class="badge-count">اطلاعات فروشگاه: {{ period_action_totals.get("info", 0) }}</span>
+                <span class="badge-count">ریست رمز: {{ period_action_totals.get("reset", 0) }}</span>
+                <span class="badge-count">شیفت: {{ period_action_totals.get("shift", 0) }}</span>
+            </div>
+            <p class="usage-note">رتبه‌بندی کاربران بر اساس تعداد درخواست‌های قابلیت‌هاست؛ پیام‌های عادی و حضور در گروه در این رتبه‌بندی محاسبه نمی‌شوند.</p>
+        </div>
 
         <div class="section-title">📅 فعال‌ترین‌ها در یه بازه‌ی دلخواه</div>
         <div class="card" style="margin-bottom: 24px;">
@@ -61,38 +89,31 @@
             </p>
             {% endif %}
 
-            {% if range_users %}
-            <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>نام</th>
-                        <th>آیدی عددی</th>
-                        <th>تعداد کل</th>
-                        <th>ریز استفاده</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for u in range_users %}
-                    <tr>
-                        <td>{{ u.full_name or "-" }}</td>
-                        <td>{{ u.user_id }}</td>
-                        <td>{{ u.total }}</td>
-                        <td>
-                            {% if u.actions.get("charge") %}<span class="badge-count">شارژ: {{ u.actions.charge }}</span>{% endif %}
-                            {% if u.actions.get("info") %}<span class="badge-count">اطلاعات: {{ u.actions.info }}</span>{% endif %}
-                            {% if u.actions.get("shift") %}<span class="badge-count">شیفت: {{ u.actions.shift }}</span>{% endif %}
-                            {% if u.actions.get("reset") %}<span class="badge-count">ریست رمز: {{ u.actions.reset }}</span>{% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="usage-rank-grid">
+                <div class="card">
+                    <div class="section-title">بیشترین استفاده در این بازه</div>
+                    {% if period_top_users %}
+                    <div class="table-wrap"><table>
+                        <thead><tr><th>رتبه</th><th>نام</th><th>تعداد درخواست</th><th>آیدی</th></tr></thead>
+                        <tbody>{% for u in period_top_users %}
+                            <tr><td>{{ loop.index }}</td><td>{{ u.full_name or "-" }}</td><td><strong>{{ u.total }}</strong></td><td>{{ u.user_id }}</td></tr>
+                        {% endfor %}</tbody>
+                    </table></div>
+                    {% else %}<div class="empty">در این بازه درخواستی ثبت نشده.</div>{% endif %}
+                </div>
+                <div class="card">
+                    <div class="section-title">کمترین استفاده بین کاربران فعال</div>
+                    {% if period_low_users %}
+                    <div class="table-wrap"><table>
+                        <thead><tr><th>نام</th><th>تعداد درخواست</th><th>آیدی</th></tr></thead>
+                        <tbody>{% for u in period_low_users %}
+                            <tr><td>{{ u.full_name or "-" }}</td><td>{{ u.total }}</td><td>{{ u.user_id }}</td></tr>
+                        {% endfor %}</tbody>
+                    </table></div>
+                    {% else %}<div class="empty">هنوز کاربر فعالی در این بازه وجود ندارد.</div>{% endif %}
+                    <p class="usage-note">{{ period_inactive_count }} کاربر ثبت‌نام‌شده در این بازه هیچ درخواستی نداشته‌اند؛ این افراد از کم‌مصرف‌های فعال جدا هستند.</p>
+                </div>
             </div>
-            {% else %}
-            <div class="empty">تو این بازه هیچ استفاده‌ای ثبت نشده.</div>
-            {% endif %}
-
             <h2>🏪 پرتقاضاترین فروشگاه‌ها این بازه</h2>
             {% if range_codes %}
             <div class="table-wrap">
@@ -165,6 +186,8 @@
         <div class="card" style="margin-bottom: 24px;">
             {% if groups %}
             <form method="post" action="/usage/send">
+                <input type="hidden" name="from_date" value="{{ from_date }}">
+                <input type="hidden" name="to_date" value="{{ to_date }}">
                 <label>ارسال گزارش بالا به یه گروه</label>
                 <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
                     <div style="flex:1; min-width:200px;">
@@ -329,6 +352,35 @@
             {% else %}
             <div class="empty">همه کاربرها حداقل یه‌بار از ربات استفاده کردن. 🎉</div>
             {% endif %}
+        </div>
+
+        <div class="section-title">حضور و پیام‌های کاربران (جدا از مصرف قابلیت‌ها)</div>
+        <div class="card" style="margin-bottom:24px;">
+            <div class="usage-actions">
+                <span class="badge-count">کاربران مشاهده‌شده: {{ presence_users_count }}</span>
+                <span class="badge-count">آنلاین: {{ presence_counts.get("online", 0) }}</span>
+                <span class="badge-count">اخیراً فعال: {{ presence_counts.get("recent", 0) }}</span>
+                <span class="badge-count">آفلاین: {{ presence_counts.get("idle", 0) }}</span>
+                <span class="badge-count">بدون حضور: {{ presence_counts.get("unseen", 0) }}</span>
+            </div>
+            <p class="usage-note">این جدول بر اساس پیام‌های دریافتی ربات است؛ پیام خصوصی و گروهی را نشان می‌دهد و در رتبه‌بندی استفاده از قابلیت‌ها دخالت ندارد. ۱۵ کاربر با بیشترین پیام نمایش داده می‌شوند.</p>
+            {% if presence_rows %}
+            <div class="table-wrap"><table>
+                <thead><tr><th>نام</th><th>آیدی</th><th>وضعیت</th><th>کل پیام</th><th>امروز</th><th>۷ روز اخیر</th><th>خصوصی / گروه</th><th>آخرین حضور</th></tr></thead>
+                <tbody>{% for u in presence_rows %}
+                    <tr>
+                        <td>{{ u.full_name }}</td>
+                        <td>{{ u.user_id }}</td>
+                        <td>{{ u.state_label }}</td>
+                        <td>{{ u.messages }}</td>
+                        <td>{{ u.today_messages }}</td>
+                        <td>{{ u.week_messages }}</td>
+                        <td>{{ u.sources.get("private", 0) }} / {{ u.sources.get("group", 0) }}</td>
+                        <td>{{ u.last_seen | shamsi or "-" }}</td>
+                    </tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}<div class="empty">هنوز پیامی برای پایش حضور ثبت نشده.</div>{% endif %}
         </div>
     </div>
 </div>

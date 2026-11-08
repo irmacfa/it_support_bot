@@ -1804,14 +1804,24 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
     """آمار دوره‌ای کاربران و حضور پیام‌رسان را برای صفحه‌ی گزارش آماده می‌کند."""
     period_stats = usage_stats.range_user_stats(from_date, to_date)
     all_stats = usage_stats.all_user_stats()
+    registered_users = registration.list_all()
+    registered_by_id = {
+        str(user.get("user_id") or ""): user
+        for user in registered_users
+        if user.get("user_id")
+    }
+    # Usage history may outlive registration records; include every recorded ID
+    # so historical requests are not silently omitted from rankings or totals.
+    all_user_ids = set(registered_by_id) | set(period_stats) | set(all_stats)
     users = []
-    for user in registration.list_all():
-        uid = str(user.get("user_id") or "")
+    for uid in sorted(all_user_ids):
+        user = registered_by_id.get(uid, {})
         period = period_stats.get(uid, {})
         lifetime = all_stats.get(uid, {})
         users.append({
             **user,
             "user_id": uid,
+            "full_name": user.get("full_name") or f"کاربر {uid}",
             "total": period.get("total", 0),
             "actions": period.get("actions", {}),
             "last_action_at": lifetime.get("last_action_at"),
@@ -1819,7 +1829,11 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
         })
 
     active = [user for user in users if user["total"] > 0]
-    inactive = [user for user in users if user["total"] == 0]
+    # Only currently registered users belong in the no-usage count.
+    inactive = [
+        user for uid, user in registered_by_id.items()
+        if period_stats.get(uid, {}).get("total", 0) == 0
+    ]
     active.sort(key=lambda user: (-user["total"], user.get("full_name") or ""))
     least_active = sorted(active, key=lambda user: (user["total"], user.get("full_name") or ""))
 
@@ -1827,8 +1841,6 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
     for user in users:
         for action, count in (user.get("actions") or {}).items():
             action_totals[action] = action_totals.get(action, 0) + count
-
-    registered_by_id = {user["user_id"]: user for user in users}
     presence_rows = []
     for uid, row in presence.snapshot().items():
         registered = registered_by_id.get(str(uid), {})
@@ -1853,8 +1865,8 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
         "period_active_count": len(active),
         "period_total_actions": sum(action_totals.values()),
         "period_action_totals": action_totals,
-        "registered_count": len(users),
-        "approved_count": sum(1 for user in users if user.get("approved")),
+        "registered_count": len(registered_users),
+        "approved_count": sum(1 for user in registered_users if user.get("approved")),
         "presence_rows": presence_rows[:15],
         "presence_total_messages": sum(row["messages"] for row in presence_rows),
         "presence_users_count": len(presence_rows),

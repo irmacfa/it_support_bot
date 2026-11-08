@@ -1904,7 +1904,7 @@ def usage_page(request: Request, from_date: str = "", to_date: str = ""):
 
 
 @app.post("/usage/send", response_class=HTMLResponse)
-def usage_send(request: Request, chat_id: str = Form(...)):
+def usage_send(request: Request, chat_id: str = Form(...), from_date: str = Form(""), to_date: str = Form("")):
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
 
@@ -1918,7 +1918,9 @@ def usage_send(request: Request, chat_id: str = Form(...)):
         msg_id = bale_bot.send_message(target["chat_id"], text)
         message = "✅ گزارش به گروه ارسال شد." if msg_id is not None else "❌ ارسال گزارش ناموفق بود."
 
-    from_date, to_date = _default_week_range()
+    default_from, default_to = _default_week_range()
+    from_date = from_date.strip() or default_from
+    to_date = to_date.strip() or default_to
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
     top_codes = _enrich_code_stats(usage_stats.all_code_stats())
     overview = _build_usage_overview(from_date, to_date)
@@ -1937,8 +1939,8 @@ def usage_send(request: Request, chat_id: str = Form(...)):
             "groups": groups.list_all(),
             "from_date": from_date,
             "to_date": to_date,
-            "default_from": from_date,
-            "default_to": to_date,
+            "default_from": default_from,
+            "default_to": default_to,
             "range_users": range_users,
             "top_charge_requester": top_charge_requester,
             "top_reset_requester": top_reset_requester,

@@ -186,6 +186,8 @@
         <div class="card" style="margin-bottom: 24px;">
             {% if groups %}
             <form method="post" action="/usage/send">
+                <input type="hidden" name="from_date" value="{{ from_date }}">
+                <input type="hidden" name="to_date" value="{{ to_date }}">
                 <label>ارسال گزارش بالا به یه گروه</label>
                 <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
                     <div style="flex:1; min-width:200px;">

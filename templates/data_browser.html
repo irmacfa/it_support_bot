@@ -119,12 +119,6 @@ table.data-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
             border-radius:10px; background:rgba(59,130,246,.07); }
 .bulk-info { font-size:.82rem; color:var(--muted); }
 select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,.25); }
-.announce-box { margin:18px 0 6px; padding:16px; border:1px solid var(--border); border-radius:12px; }
-.announce-box h3 { margin:0 0 8px; font-size:1rem; }
-.region-wrap { max-height:340px; overflow:auto; }
-.announce-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
-#announceText { padding:10px; border:1px solid var(--border); border-radius:8px;
-                background:var(--bg-soft); color:var(--text); }
 </style>
 </head>
 <body>
@@ -281,44 +275,6 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
                             onclick="saveAllStoreExperts()" disabled>💾 ذخیره‌ی گروهی تغییرات</button>
                 </div>
 
-                <div class="announce-box">
-                    <h3>🗺 کارشناس انفورماتیک هر منطقه</h3>
-                    <p class="hint" style="margin:0 0 10px;">
-                        کارشناس هر منطقه را انتخاب کن و «ذخیره» را بزن. بعد با دکمه‌های پایین
-                        می‌توانی همین جدول را یا فروشگاه‌های بدون کارشناس را برای گروه
-                        <b>{{ announce_group_title }}</b> بفرستی — اول پیش‌نمایش می‌آید، بعد تأیید.
-                    </p>
-                    <div class="table-wrap region-wrap">
-                        <table class="data-table" id="regionTable">
-                            <thead>
-                                <tr>
-                                    <th>منطقه</th>
-                                    <th>تعداد فروشگاه</th>
-                                    <th>مدیر منطقه</th>
-                                    <th>کارشناس انفورماتیک</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {%- for r in region_rows %}
-                                <tr><td>{{ r.region }}</td><td>{{ r.count }}</td><td>{{ r.manager or '—' }}</td><td class="pick"><select data-region="{{ r.region }}" data-prev="{{ r.expert }}" onchange="if (this.dataset.prev !== this.value) this.classList.add('dirty'); refreshRegionBar()"><option value="">فاقد کارشناس</option>{% for name in expert_names %}<option value="{{ name }}"{% if name == r.expert %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></td></tr>
-                                {%- endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="bulk-bar">
-                        <span class="bulk-info" id="regionPending">کارشناس مناطق ذخیره شده است.</span>
-                        <button type="button" class="btn btn-active" id="regionSaveBtn"
-                                onclick="saveRegionExperts()" disabled>💾 ذخیره‌ی کارشناس مناطق</button>
-                    </div>
-                    <div class="announce-actions">
-                        <button type="button" class="btn btn-outline" onclick="announcePreview('regions')">
-                            👁️ پیش‌نمایش پیام «کارشناس مناطق»
-                        </button>
-                        <button type="button" class="btn btn-outline" onclick="announcePreview('unassigned')">
-                            👁️ پیش‌نمایش پیام «فروشگاه‌های بدون کارشناس»
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
         {% endif %}
@@ -693,66 +649,6 @@ async function saveAllStoreExperts() {
   setTimeout(() => location.reload(), 600);
 }
 
-function refreshRegionBar() {
-  const dirty = document.querySelectorAll('#regionTable select[data-region].dirty');
-  const btn = document.getElementById('regionSaveBtn');
-  const info = document.getElementById('regionPending');
-  if (!btn || !info) return;
-  btn.disabled = dirty.length === 0;
-  btn.textContent = dirty.length ? `💾 ذخیره‌ی ${dirty.length} منطقه` : '💾 ذخیره‌ی کارشناس مناطق';
-  info.textContent = dirty.length
-    ? `${dirty.length} منطقه منتظر ذخیره است.`
-    : 'کارشناس مناطق ذخیره شده است.';
-}
-
-async function saveRegionExperts() {
-  const sels = [...document.querySelectorAll('#regionTable select[data-region]')];
-  const regions = {};
-  sels.forEach(s => { regions[s.dataset.region] = s.value; });
-  const btn = document.getElementById('regionSaveBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ در حال ذخیره...';
-  const res = await postJSON('/api/region-experts', {regions: regions});
-  if (!res.ok) {
-    refreshRegionBar();
-    alert(res.message || 'ذخیره انجام نشد');
-    return;
-  }
-  sels.forEach(s => { s.dataset.prev = s.value; s.classList.remove('dirty'); });
-  refreshRegionBar();
-  alert(res.message || 'ذخیره شد');
-}
-
-async function announcePreview(kind) {
-  const res = await postJSON('/api/announce/preview', {kind: kind});
-  if (!res.ok) { alert(res.message || 'خطا'); return; }
-  const box = document.getElementById('announceText');
-  document.getElementById('announceKind').value = kind;
-  box.value = res.text;
-  const modal = document.getElementById('announceModal');
-  modal.style.display = 'flex';
-}
-
-async function announceSend() {
-  const kind = document.getElementById('announceKind').value;
-  const box = document.getElementById('announceText');
-  if (!confirm('همین پیام برای گروه ارسال شود؟\n(پس از ارسال قابل ویرایش نیست)')) return;
-  const btn = document.getElementById('announceSendBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ در حال ارسال...';
-  const res = await postJSON('/api/announce/send', {kind: kind});
-  btn.disabled = false;
-  btn.textContent = '📤 ارسال به گروه';
-  if (!res.ok) { alert(res.message || 'ارسال نشد'); return; }
-  document.getElementById('announceModal').style.display = 'none';
-  box.value = '';
-  alert(res.message || 'ارسال شد');
-}
-
-function announceClose() {
-  document.getElementById('announceModal').style.display = 'none';
-}
-
 async function doRenameExpert(idx, current) {
   const box = document.getElementById('rn-' + idx);
   const name = (box?.value || '').trim();
@@ -786,28 +682,6 @@ async function doRenameExpert(idx, current) {
       <button type="button" class="btn btn-sm" onclick="selectAllDirColumns(true)">✅ همه</button>
       <button type="button" class="btn btn-sm" onclick="selectAllDirColumns(false)">➖ فقط ضروری‌ها</button>
       <button type="button" class="btn btn-active" onclick="saveDirColumns()">💾 ذخیره انتخاب</button>
-    </div>
-  </div>
-</div>
-
-<!-- ==== ویرایش گروهی کارشناس انفورماتیک ==== -->
-<div class="col-picker-overlay" id="announceModal">
-  <div class="col-picker">
-    <div class="col-picker-head">
-      <h3>👁️ پیش‌نمایش پیام اطلاع‌رسانی</h3>
-      <button type="button" class="btn btn-sm" onclick="announceClose()">✕ بستن</button>
-    </div>
-    <div class="col-picker-body">
-      <p class="hint" style="margin:0 0 12px;">
-        متن زیر را بخوان؛ اگر درست بود «ارسال به گروه» را بزن. متن از وضعیت فعلی
-        داده‌ها ساخته می‌شود و بعد از ارسال قابل ویرایش نیست.
-      </p>
-      <input type="hidden" id="announceKind" value="regions">
-      <textarea id="announceText" rows="16" readonly style="width:100%;font-family:inherit;font-size:.82rem;line-height:1.9;"></textarea>
-      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
-        <button type="button" class="btn btn-outline" onclick="announceClose()">بستن</button>
-        <button type="button" class="btn btn-active" id="announceSendBtn" onclick="announceSend()">📤 ارسال به گروه</button>
-      </div>
     </div>
   </div>
 </div>

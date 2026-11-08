@@ -184,6 +184,41 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
         </div>
         {% endif %}
 
+        {% if directory_rows %}
+        <div class="tab-panel" id="panel-closed">
+            <div class="card">
+                <div class="search-row">
+                    <input type="text" placeholder="جستجو در کد، نام یا منطقه فروشگاه بسته‌شده..." oninput="filterTable('closed-directory', this.value)">
+                    <span class="row-count" id="closed-directory-count">{{ closed_count }} ردیف</span>
+                </div>
+                {% if closed_rows %}
+                <div class="table-wrap">
+                    <table class="data-table" id="closed-directory">
+                        <thead>
+                            <tr>
+                                {% for col in directory_columns %}
+                                <th onclick="sortTable('closed-directory', {{ loop.index0 }}, this)">{{ col.label }}<span class="sort-arrow"></span></th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in closed_rows %}
+                            <tr>
+                                {% for col in directory_columns %}
+                                <td>{{ row.get(col.key, '') }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="hint">در شیت فروشگاه‌های بسته‌شده، فروشگاهی با کد منطبق در فهرست کامل فروشگاه‌ها پیدا نشد.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         {% if expert_groups %}
         <div class="tab-panel {{ 'active' if not directory_rows and not store_groups else '' }}" id="panel-experts">
             <div class="card">

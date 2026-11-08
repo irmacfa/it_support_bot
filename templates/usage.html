@@ -91,7 +91,7 @@
 
             <div class="usage-rank-grid">
                 <div class="card">
-                    <div class="section-title">بیشترین استفاده در این بازه</div>
+                    <div class="section-title">بیشترین استفاده بین همه کاربران در این بازه</div>
                     {% if period_top_users %}
                     <div class="table-wrap"><table>
                         <thead><tr><th>رتبه</th><th>نام</th><th>تعداد درخواست</th><th>آیدی</th></tr></thead>
@@ -102,7 +102,7 @@
                     {% else %}<div class="empty">در این بازه درخواستی ثبت نشده.</div>{% endif %}
                 </div>
                 <div class="card">
-                    <div class="section-title">کمترین استفاده بین کاربران فعال</div>
+                    <div class="section-title">کمترین استفاده بین همه کاربران در این بازه</div>
                     {% if period_low_users %}
                     <div class="table-wrap"><table>
                         <thead><tr><th>نام</th><th>تعداد درخواست</th><th>آیدی</th></tr></thead>
@@ -363,7 +363,7 @@
                 <span class="badge-count">آفلاین: {{ presence_counts.get("idle", 0) }}</span>
                 <span class="badge-count">بدون حضور: {{ presence_counts.get("unseen", 0) }}</span>
             </div>
-            <p class="usage-note">این جدول بر اساس پیام‌های دریافتی ربات است؛ پیام خصوصی و گروهی را نشان می‌دهد و در رتبه‌بندی استفاده از قابلیت‌ها دخالت ندارد. ۱۵ کاربر با بیشترین پیام نمایش داده می‌شوند.</p>
+            <p class="usage-note">این جدول بر اساس پیام‌های دریافتی ربات است؛ پیام خصوصی و گروهی را نشان می‌دهد و در رتبه‌بندی استفاده از قابلیت‌ها دخالت ندارد. تمام کاربرانی که سابقه پیام دارند نمایش داده می‌شوند.</p>
             {% if presence_rows %}
             <div class="table-wrap"><table>
                 <thead><tr><th>نام</th><th>آیدی</th><th>وضعیت</th><th>کل پیام</th><th>امروز</th><th>۷ روز اخیر</th><th>خصوصی / گروه</th><th>آخرین حضور</th></tr></thead>

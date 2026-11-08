@@ -2148,35 +2148,6 @@ def data_browser_page(request: Request):
         else:
             merged.append(g)
 
-    # انتقال فروشگاه‌های بسته شده به بخش «فاقد کارشناس»
-    if closed_codes_set:
-        existing_codes = set()
-        if unset_target:
-            for s in unset_target.get("stores", []):
-                c = str(s.get("code") or "").strip()
-                if c:
-                    existing_codes.add(c)
-        closed_items = []
-        for r in dir_rows:
-            code = str(r.get(info_store.INFO_CODE_COL) or "").strip()
-            if not code or code not in closed_codes_set:
-                continue
-            if code in existing_codes:
-                continue
-            closed_items.append({
-                "code": code,
-                "name": str(r.get("فروشگاه") or r.get("نام فروشگاه") or "").strip(),
-                "region": str(r.get("منطقه نهائی") or r.get("منطقه فروش") or "").strip() or "نامشخص",
-            })
-        if closed_items:
-            if unset_target is None:
-                unset_target = {"expert": UNSET, "count": 0, "stores": []}
-                merged.append(unset_target)
-            for it in closed_items:
-                unset_target["stores"].append(it)
-                existing_codes.add(it["code"])
-            unset_target["count"] = len(unset_target["stores"])
-
     unassigned = sum(g["count"] for g in merged if g["expert"] == UNSET)
     expert_names = sorted({r.get(EXPERT_COL, "") for r in dir_rows
                            if r.get(EXPERT_COL) and r.get(EXPERT_COL) != UNSET})

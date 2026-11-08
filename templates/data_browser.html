@@ -134,22 +134,22 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
         {% if store_groups or info_groups or directory_rows %}
         <div class="tabs-row">
             {% if directory_rows %}
-            <button type="button" class="tab-btn {{ 'active' if not store_groups else '' }}" onclick="showTab('panel-directory', this)">🗂 فهرست کامل فروشگاه‌ها ({{ directory_rows | length }})</button>
+            <button type="button" class="tab-btn {{ 'active' if directory_rows else '' }}" onclick="showTab('panel-directory', this)">🗂 فهرست کامل فروشگاه‌ها ({{ directory_rows | length }})</button>
             <button type="button" class="tab-btn" onclick="showTab('panel-closed', this)">🔒 فروشگاه‌های بسته شده ({{ closed_count }})</button>
             {% endif %}
             {% if expert_groups %}
-            <button type="button" class="tab-btn {{ 'active' if not store_groups and not directory_rows else '' }}" onclick="showTab('panel-experts', this)">👤 لیست کارشناسان ({{ expert_groups | length }})</button>
+            <button type="button" class="tab-btn {{ 'active' if not directory_rows and not store_groups else '' }}" onclick="showTab('panel-experts', this)">👤 لیست کارشناسان ({{ expert_groups | length }})</button>
             {% endif %}
             {% for source, group in store_groups.items() %}
-            <button type="button" class="tab-btn {{ 'active' if loop.first else '' }}" onclick="showTab('panel-store-{{ loop.index }}', this)">📶 {{ source }} ({{ group.rows | length }})</button>
+            <button type="button" class="tab-btn {{ 'active' if loop.first and not directory_rows else '' }}" onclick="showTab('panel-store-{{ loop.index }}', this)">📶 {{ source }} ({{ group.rows | length }})</button>
             {% endfor %}
             {% if info_groups %}
-            <button type="button" class="tab-btn {{ 'active' if not store_groups and not directory_rows else '' }}" onclick="showTab('panel-info', this)">📋 اطلاعات فروشگاه‌ها</button>
+            <button type="button" class="tab-btn {{ 'active' if not directory_rows and not store_groups and not expert_groups else '' }}" onclick="showTab('panel-info', this)">📋 اطلاعات فروشگاه‌ها</button>
             {% endif %}
         </div>
 
         {% if directory_rows %}
-        <div class="tab-panel {{ 'active' if not store_groups else '' }}" id="panel-directory">
+        <div class="tab-panel {{ 'active' if directory_rows else '' }}" id="panel-directory">
             <div class="card">
                 <div class="search-row">
                     <input type="text" placeholder="جستجو در کد، نام، شهر، منطقه یا کارشناس..." oninput="filterTable('directory', this.value)">
@@ -185,7 +185,7 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
         {% endif %}
 
         {% if expert_groups %}
-        <div class="tab-panel {{ 'active' if not store_groups and not directory_rows else '' }}" id="panel-experts">
+        <div class="tab-panel {{ 'active' if not directory_rows and not store_groups else '' }}" id="panel-experts">
             <div class="card">
                 <div class="search-row">
                     <input type="text" placeholder="جستجوی کارشناس، کد یا نام فروشگاه..." oninput="filterExpertGroups(this.value)">
@@ -284,7 +284,7 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
         {% endif %}
 
         {% for source, group in store_groups.items() %}
-        <div class="tab-panel {{ 'active' if loop.first else '' }}" id="panel-store-{{ loop.index }}">
+        <div class="tab-panel {{ 'active' if loop.first and not directory_rows else '' }}" id="panel-store-{{ loop.index }}">
             <div class="card">
                 <div class="search-row">
                     <input type="text" placeholder="جستجو..." oninput="filterTable('store-{{ loop.index }}', this.value)">
@@ -311,7 +311,7 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
         {% endfor %}
 
         {% if info_groups %}
-        <div class="tab-panel {{ 'active' if not store_groups else '' }}" id="panel-info">
+        <div class="tab-panel {{ 'active' if not directory_rows and not store_groups and not expert_groups else '' }}" id="panel-info">
             {% for source, group in info_groups.items() %}
             <div class="card" style="margin-bottom:16px;">
                 <div class="search-row">

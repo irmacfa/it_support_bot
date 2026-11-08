@@ -1846,7 +1846,6 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
         })
     presence_rows.sort(key=lambda row: (-row["messages"], row["full_name"]))
 
-    all_time_active = _build_usage_data()[0]
     return {
         "period_top_users": active[:10],
         "period_low_users": least_active[:10],
@@ -1856,11 +1855,6 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
         "period_action_totals": action_totals,
         "registered_count": len(users),
         "approved_count": sum(1 for user in users if user.get("approved")),
-        "all_time_top_users": all_time_active[:10],
-        "all_time_low_users": sorted(
-            all_time_active,
-            key=lambda user: (user["total"], user.get("full_name") or ""),
-        )[:10],
         "presence_rows": presence_rows[:15],
         "presence_total_messages": sum(row["messages"] for row in presence_rows),
         "presence_users_count": len(presence_rows),

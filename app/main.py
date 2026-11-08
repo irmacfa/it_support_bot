@@ -2096,6 +2096,14 @@ def data_browser_page(request: Request):
     UNSET = info_store.EXPERT_UNSET
 
     dir_rows, dir_columns = info_store.get_directory_rows()
+    # فهرست بسته‌شده‌ها از همان کدهای شیت «فروشگاههای بسته شده» ساخته می‌شود
+    # تا با منطق فعلیِ نمایش آن‌ها در گروه «فاقد کارشناس» یکسان بماند.
+    closed_codes_set = info_store.closed_codes()
+    closed_rows = [
+        r for r in dir_rows
+        if str(r.get(info_store.INFO_CODE_COL) or "").strip() in closed_codes_set
+    ]
+
     # کارشناسِ منفک‌شده (مثل محمد شیری) هم «فاقد کارشناس» حساب می‌شه،
     # هم‌طور که مانیتورینگ نشون می‌ده.
     for r in dir_rows:
@@ -2141,7 +2149,6 @@ def data_browser_page(request: Request):
             merged.append(g)
 
     # انتقال فروشگاه‌های بسته شده به بخش «فاقد کارشناس»
-    closed_codes_set = info_store.closed_codes()
     if closed_codes_set:
         existing_codes = set()
         if unset_target:
@@ -2183,6 +2190,8 @@ def data_browser_page(request: Request):
             "info_groups": info_sheet_groups,
             "directory_rows": dir_rows,
             "directory_columns": dir_columns,
+            "closed_rows": closed_rows,
+            "closed_count": len(closed_rows),
             "directory_all_columns": info_store.get_directory_columns(),
             "directory_unassigned": unassigned,
             "expert_names": expert_names,

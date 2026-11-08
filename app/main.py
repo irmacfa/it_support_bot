@@ -1800,6 +1800,74 @@ def _build_range_usage_data(from_date: str, to_date: str) -> tuple[list[dict], d
     return range_users, top_charge_requester, top_reset_requester, range_codes
 
 
+def _build_usage_overview(from_date: str, to_date: str) -> dict:
+    """آمار دوره‌ای کاربران و حضور پیام‌رسان را برای صفحه‌ی گزارش آماده می‌کند."""
+    period_stats = usage_stats.range_user_stats(from_date, to_date)
+    all_stats = usage_stats.all_user_stats()
+    users = []
+    for user in registration.list_all():
+        uid = str(user.get("user_id") or "")
+        period = period_stats.get(uid, {})
+        lifetime = all_stats.get(uid, {})
+        users.append({
+            **user,
+            "user_id": uid,
+            "total": period.get("total", 0),
+            "actions": period.get("actions", {}),
+            "last_action_at": lifetime.get("last_action_at"),
+            "lifetime_total": lifetime.get("total", 0),
+        })
+
+    active = [user for user in users if user["total"] > 0]
+    inactive = [user for user in users if user["total"] == 0]
+    active.sort(key=lambda user: (-user["total"], user.get("full_name") or ""))
+    least_active = sorted(active, key=lambda user: (user["total"], user.get("full_name") or ""))
+
+    action_totals = {"charge": 0, "info": 0, "reset": 0, "shift": 0}
+    for user in users:
+        for action, count in (user.get("actions") or {}).items():
+            action_totals[action] = action_totals.get(action, 0) + count
+
+    registered_by_id = {user["user_id"]: user for user in users}
+    presence_rows = []
+    for uid, row in presence.snapshot().items():
+        registered = registered_by_id.get(str(uid), {})
+        presence_rows.append({
+            "user_id": str(uid),
+            "full_name": registered.get("full_name") or row.get("display_name") or f"کاربر {uid}",
+            "username": registered.get("username") or row.get("username") or "",
+            "messages": row.get("messages", 0),
+            "today_messages": row.get("today", 0),
+            "week_messages": row.get("week", 0),
+            "sources": row.get("sources") or {},
+            "last_seen": row.get("last_seen"),
+            "state": row.get("state", "unseen"),
+            "state_label": STATE_LABELS.get(row.get("state"), ("نامشخص", "⚪"))[0],
+        })
+    presence_rows.sort(key=lambda row: (-row["messages"], row["full_name"]))
+
+    all_time_active = _build_usage_data()[0]
+    return {
+        "period_top_users": active[:10],
+        "period_low_users": least_active[:10],
+        "period_inactive_count": len(inactive),
+        "period_active_count": len(active),
+        "period_total_actions": sum(action_totals.values()),
+        "period_action_totals": action_totals,
+        "registered_count": len(users),
+        "approved_count": sum(1 for user in users if user.get("approved")),
+        "all_time_top_users": all_time_active[:10],
+        "all_time_low_users": sorted(
+            all_time_active,
+            key=lambda user: (user["total"], user.get("full_name") or ""),
+        )[:10],
+        "presence_rows": presence_rows[:15],
+        "presence_total_messages": sum(row["messages"] for row in presence_rows),
+        "presence_users_count": len(presence_rows),
+        "presence_counts": presence.state_counts(),
+    }
+
+
 @app.get("/usage", response_class=HTMLResponse)
 def usage_page(request: Request, from_date: str = "", to_date: str = ""):
     if not _is_authed(request):
@@ -1812,11 +1880,13 @@ def usage_page(request: Request, from_date: str = "", to_date: str = ""):
     to_date = to_date.strip() or default_to
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
     top_codes = _enrich_code_stats(usage_stats.all_code_stats())
+    overview = _build_usage_overview(from_date, to_date)
 
     return templates.TemplateResponse(
         "usage.html",
         {
             "request": request,
+            **overview,
             "active_users": active_users,
             "inactive_users": inactive_users,
             "admins": admins,
@@ -1857,11 +1927,13 @@ def usage_send(request: Request, chat_id: str = Form(...)):
     from_date, to_date = _default_week_range()
     range_users, top_charge_requester, top_reset_requester, range_codes = _build_range_usage_data(from_date, to_date)
     top_codes = _enrich_code_stats(usage_stats.all_code_stats())
+    overview = _build_usage_overview(from_date, to_date)
 
     return templates.TemplateResponse(
         "usage.html",
         {
             "request": request,
+            **overview,
             "active_users": active_users,
             "inactive_users": inactive_users,
             "admins": admins,

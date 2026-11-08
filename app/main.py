@@ -1828,14 +1828,22 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
             "lifetime_total": lifetime.get("total", 0),
         })
 
+    # Keep all registered and historically recorded users in both rankings,
+    # including users with zero requests in the selected period.
+    ranked_users = sorted(
+        users,
+        key=lambda user: (-user["total"], user.get("full_name") or ""),
+    )
+    least_active = sorted(
+        users,
+        key=lambda user: (user["total"], user.get("full_name") or ""),
+    )
     active = [user for user in users if user["total"] > 0]
     # Only currently registered users belong in the no-usage count.
     inactive = [
         user for uid, user in registered_by_id.items()
         if period_stats.get(uid, {}).get("total", 0) == 0
     ]
-    active.sort(key=lambda user: (-user["total"], user.get("full_name") or ""))
-    least_active = sorted(active, key=lambda user: (user["total"], user.get("full_name") or ""))
 
     action_totals = {"charge": 0, "info": 0, "reset": 0, "shift": 0}
     for user in users:
@@ -1859,15 +1867,15 @@ def _build_usage_overview(from_date: str, to_date: str) -> dict:
     presence_rows.sort(key=lambda row: (-row["messages"], row["full_name"]))
 
     return {
-        "period_top_users": active[:10],
-        "period_low_users": least_active[:10],
+        "period_top_users": ranked_users,
+        "period_low_users": least_active,
         "period_inactive_count": len(inactive),
         "period_active_count": len(active),
         "period_total_actions": sum(action_totals.values()),
         "period_action_totals": action_totals,
         "registered_count": len(registered_users),
         "approved_count": sum(1 for user in registered_users if user.get("approved")),
-        "presence_rows": presence_rows[:15],
+        "presence_rows": presence_rows,
         "presence_total_messages": sum(row["messages"] for row in presence_rows),
         "presence_users_count": len(presence_rows),
         "presence_counts": presence.state_counts(),

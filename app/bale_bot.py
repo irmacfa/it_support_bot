@@ -1261,7 +1261,13 @@ def handle_callback_query(callback_query: dict) -> None:
                 today_str = jdatetime.date.today().strftime("%Y/%m/%d")
                 record = schedule_store.lookup(today_str)
                 send_message(chat_id, format_today_shift(record))
-                usage_stats.record_action(clicking_admin.get("id"), "shift")
+                # Private-menu shift checks by configured admins are operational
+                # lookups, not end-user feature usage.
+                operational_admin_ids = {str(config.ADMIN_CHAT_ID)} if config.ADMIN_CHAT_ID else set()
+                operational_admin_ids.update(str(uid) for uid in charge_admins.get_ids())
+                operational_admin_ids.update(str(uid) for uid in reset_admins.get_ids())
+                if clicking_admin_id not in operational_admin_ids:
+                    usage_stats.record_action(clicking_admin.get("id"), "shift")
             answer_callback_query(cq_id, "شیفت امروز")
         elif action == "help":
             if chat_id:

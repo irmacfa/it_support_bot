@@ -654,6 +654,23 @@ def closed_codes() -> frozenset[str]:
     return result
 
 
+def partition_directory_rows(
+    rows: list[dict], closed_codes_set
+) -> tuple[list[dict], list[dict]]:
+    """فهرست را با کد نرمال‌شده به فروشگاه‌های فعال و بسته تقسیم می‌کند."""
+    normalized_closed = {
+        _normalize_code(code) for code in (closed_codes_set or ())
+        if _normalize_code(code)
+    }
+    active_rows: list[dict] = []
+    closed_rows: list[dict] = []
+    for row in rows:
+        code = _normalize_code(row.get(INFO_CODE_COL))
+        target = closed_rows if code and code in normalized_closed else active_rows
+        target.append(row)
+    return active_rows, closed_rows
+
+
 def clear_closed_experts() -> dict:
     """کارشناسِ فروشگاه‌های بسته را خالی می‌کند.
 
@@ -695,8 +712,8 @@ def get_expert_groups() -> list[dict]:
     closed = closed_codes()
     groups: dict[str, list[dict]] = {}
     for row in rows:
-        code = str(row.get(INFO_CODE_COL) or "").strip()
-        if code in closed:
+        code = _normalize_code(row.get(INFO_CODE_COL))
+        if code and code in closed:
             continue
         expert = str(row.get(EXPERT_COLUMN) or "").strip() or EXPERT_UNSET
         # کارشناسِ منفک (مثل «شیری») هم «فاقد کارشناس» حساب می‌شه تا همه‌ی

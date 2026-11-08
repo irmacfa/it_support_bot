@@ -199,8 +199,8 @@
               <div class="coverage">
                 {% for r in monitor.stores.by_region[:12] %}
                 <div>
-                  <div class="coverage-line"><strong>{{ r.region }}</strong><span>{{ r.covered }} از {{ r.total }} · {{ r.pct }}٪</span></div>
-                  <div class="coverage-track"><div class="coverage-fill" style="width:{{ [r.pct,100]|min }}%"></div></div>
+                  <div class="coverage-line"><strong>{{ r.region }}</strong><span>{{ r.total - r.unassigned }} از {{ r.total }} · {{ 100 - r.pct }}٪</span></div>
+                  <div class="coverage-track"><div class="coverage-fill" style="width:{{ [100 - r.pct,100]|min }}%"></div></div>
                 </div>
                 {% endfor %}
               </div>
@@ -237,7 +237,7 @@
             <div class="panel-head"><div><div class="panel-title">کارشناسان پاسخ‌گوی شارژ</div><div class="panel-desc">رتبه‌بندی بر اساس تعداد پاسخ‌ها</div></div></div>
             <div class="panel-body">
               {% if monitor.admins %}
-              <div class="rows">{% for a in monitor.admins[:5] %}<div class="row-item"><div class="row-main"><span class="pill">{{ loop.index }}</span><span class="row-name">{{ a.name or a.user_id }}</span></div><span class="row-number">{{ a.responded_count }}</span></div>{% endfor %}</div>
+              <div class="rows">{% for a in monitor.admins[:5] %}<div class="row-item"><div class="row-main"><span class="pill">{{ loop.index }}</span><span class="row-name">{{ a.get('name') or a.get('full_name') or a.user_id }}</span></div><span class="row-number">{{ a.responded_count }}</span></div>{% endfor %}</div>
               {% else %}<div class="empty">هنوز پاسخی برای رتبه‌بندی ثبت نشده است.</div>{% endif %}
             </div>
           </section>

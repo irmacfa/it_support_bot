@@ -2060,7 +2060,7 @@ def closed_stores_page(request: Request):
     dir_rows, _ = info_store.get_directory_rows()
     items = []
     for r in dir_rows:
-        code = str(r.get(info_store.INFO_CODE_COL) or "").strip()
+        code = info_store._normalize_code(r.get(info_store.INFO_CODE_COL))
         if code and code in closed:
             items.append({
                 "code": code,
@@ -2095,14 +2095,13 @@ def data_browser_page(request: Request):
     EXPERT_COL = info_store.EXPERT_COLUMN
     UNSET = info_store.EXPERT_UNSET
 
-    dir_rows, dir_columns = info_store.get_directory_rows()
-    # فهرست بسته‌شده‌ها از همان کدهای شیت «فروشگاههای بسته شده» ساخته می‌شود
-    # تا با منطق فعلیِ نمایش آن‌ها در گروه «فاقد کارشناس» یکسان بماند.
+    all_dir_rows, dir_columns = info_store.get_directory_rows()
+    # فروشگاه‌های بسته فقط در تب مستقل خودشان می‌آیند؛ همه‌ی شمارش‌ها و
+    # گروه‌بندی کارشناسان از فهرست فعال‌ها محاسبه می‌شود.
     closed_codes_set = info_store.closed_codes()
-    closed_rows = [
-        r for r in dir_rows
-        if str(r.get(info_store.INFO_CODE_COL) or "").strip() in closed_codes_set
-    ]
+    dir_rows, closed_rows = info_store.partition_directory_rows(
+        all_dir_rows, closed_codes_set
+    )
 
     # کارشناسِ منفک‌شده (مثل محمد شیری) هم «فاقد کارشناس» حساب می‌شه،
     # هم‌طور که مانیتورینگ نشون می‌ده.

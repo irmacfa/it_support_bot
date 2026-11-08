@@ -78,34 +78,39 @@ table.data-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
 .bulk-preview.warn { border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.08); }
 .bulk-preview ul { margin: 8px 0 0; padding-right: 18px; color: var(--muted); }
 
-/* ==== تب لیست کارشناسان ==== */
-.exp-group { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+/* ==== تب لیست کارشناسان: آکاردئون فشرده ==== */
+.exp-group { border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; overflow: hidden; }
 .exp-head {
-  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 10px;
   background: var(--card2); cursor: pointer; user-select: none;
 }
 .exp-head:hover { border-color: var(--accent); }
-.exp-head .caret { transition: transform .15s; color: var(--muted); font-size: .8rem; }
+.exp-head .caret { transition: transform .15s; color: var(--muted); font-size: .68rem; width: 12px; text-align:center; }
 .exp-group.open .exp-head .caret { transform: rotate(-90deg); }
-.exp-head .exp-name { font-weight: 600; }
+.exp-head .exp-name { font-weight: 600; font-size: .86rem; line-height: 1.4; }
 .exp-head .exp-count {
-  font-size: .74rem; padding: 2px 9px; border-radius: 999px;
-  background: rgba(59,130,246,.16); color: var(--accent);
+  font-size: .7rem; padding: 1px 8px; border-radius: 999px;
+  background: rgba(59,130,246,.14); color: var(--accent); white-space: nowrap;
 }
 .exp-head.unset .exp-name { color: #f59e0b; }
 .exp-head .spacer { flex: 1; }
-.exp-body { display: none; padding: 4px 0; }
+.exp-body { display: none; padding: 3px 8px 8px; }
 .exp-group.open .exp-body { display: block; }
+.exp-body .table-wrap { max-height: 440px; overflow: auto; }
+.exp-body .data-table th, .exp-body .data-table td { padding: 5px 8px; font-size: .78rem; line-height: 1.35; }
 .exp-body td.pick { width: 1%; }
 .exp-body select {
-  font-family: inherit; font-size: .78rem; padding: 3px 6px; margin: 0;
-  min-width: 150px; cursor: pointer;
+  font-family: inherit; font-size: .75rem; padding: 2px 5px; margin: 0;
+  min-width: 130px; cursor: pointer;
 }
-.exp-tools { display: flex; gap: 6px; align-items: center; }
-.exp-tools input[type="text"] { margin: 0; padding: 4px 8px; font-size: .78rem; min-width: 150px; }
+.exp-tools { display: none; gap: 5px; align-items: center; }
+.exp-group.open .exp-tools { display: flex; }
+.exp-tools input[type="text"] { margin: 0; padding: 3px 7px; font-size: .74rem; min-width: 125px; max-width: 170px; }
 @media (max-width: 560px) {
-  .exp-head { flex-wrap: wrap; }
-  .exp-body { overflow-x: auto; }
+  .exp-head { flex-wrap: wrap; gap: 6px; }
+  .exp-head .spacer { display:none; }
+  .exp-group.open .exp-tools { width:100%; padding-right:20px; }
+  .exp-body .table-wrap { overflow-x: auto; }
   .bulk-grid { grid-template-columns: 1fr; }
 }
 
@@ -224,8 +229,8 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
             <div class="card">
                 <div class="search-row">
                     <input type="text" placeholder="جستجوی کارشناس، کد یا نام فروشگاه..." oninput="filterExpertGroups(this.value)">
-                    <button type="button" class="btn btn-sm" onclick="toggleAllExpertGroups(this)">▾ باز/بستن همه</button>
-                    <span class="row-count">{{ directory_rows | length }} فروشگاه در {{ expert_groups | length }} گروه</span>
+                    <button type="button" class="btn btn-sm" onclick="toggleAllExpertGroups(this)">▾ بازکردن همه</button>
+                    <span class="row-count">{{ directory_rows | length }} فروشگاه فعال در {{ expert_groups | length }} گروه</span>
                 </div>
                 <p class="hint" style="margin:0 0 12px;">
                     هر بخش یک کارشناسه و فروشگاه‌های زیرمون رو نشون می‌ده.
@@ -233,7 +238,7 @@ select.dirty { border-color:var(--accent); box-shadow:0 0 0 2px rgba(59,130,246,
                     «✏️ تغییر نام» اسم کارشناس رو روی همه‌ی فروشگاه‌هایش یک‌جا تغییر بدی.
                 </p>
                 {% for group in expert_groups %}
-                <div class="exp-group{% if loop.first %} open{% endif %}{% if group.expert == expert_unset %} unset{% endif %}"
+                <div class="exp-group{% if group.expert == expert_unset %} unset{% endif %}"
                      data-expert="{{ group.expert }}" data-count="{{ group.count }}">
                     <div class="exp-head" onclick="toggleExpertGroup(this)">
                         <span class="caret">▼</span>
@@ -626,10 +631,10 @@ function toggleExpertGroup(head) {
 }
 
 function toggleAllExpertGroups(btn) {
-  const groups = document.querySelectorAll('#panel-experts .exp-group');
-  const anyClosed = [...groups].some(g => !g.classList.contains('open'));
+  const groups = [...document.querySelectorAll('#panel-experts .exp-group')].filter(g => g.style.display !== 'none');
+  const anyClosed = groups.some(g => !g.classList.contains('open'));
   groups.forEach(g => g.classList.toggle('open', anyClosed));
-  btn.textContent = anyClosed ? '▴ بستن همه' : '▾ باز/بستن همه';
+  btn.textContent = anyClosed ? '▴ بستن همه' : '▾ بازکردن همه';
 }
 
 function filterExpertGroups(q) {

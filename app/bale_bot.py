@@ -1595,7 +1595,7 @@ def format_today_shift(record: dict | None) -> str:
     return "\n".join(lines)
 
 
-def format_usage_report(active_users: list, inactive_users: list, admins: list, top_admin_id, reset_admins: list | None = None, top_reset_admin_id=None, top_n: int = 5) -> str:
+def format_usage_report(active_users: list, inactive_users: list, admins: list, top_admin_id, reset_admins: list | None = None, top_reset_admin_id=None) -> str:
     """گزارش آمار استفاده از ربات رو برای ارسال به گروه فرمت می‌کنه."""
     lines = [
         "📊 گزارش استفاده از ربات",
@@ -1607,7 +1607,7 @@ def format_usage_report(active_users: list, inactive_users: list, admins: list, 
     if active_users:
         lines.append("")
         lines.append("🏅 پراستفاده‌ترین کاربرها:")
-        for i, u in enumerate(active_users[:top_n], 1):
+        for i, u in enumerate(active_users, 1):
             lines.append(f"{i}. {u.get('full_name') or '-'} — {u['total']} بار")
 
     if admins:

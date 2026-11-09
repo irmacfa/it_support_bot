@@ -109,13 +109,13 @@
               {% if monitor.stores.separated_count %}
               <div class="issue">
                 <div class="issue-main"><div class="issue-title">{{ monitor.stores.separated_count }} فروشگاه با کارشناس منفک</div><div class="issue-desc">مسئولیت این فروشگاه‌ها باید دوباره بررسی شود.</div></div>
-                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/monitor#separated">بررسی</a>
+                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/data#experts">بررسی</a>
               </div>
               {% endif %}
               {% if monitor.stores.effective_unassigned %}
               <div class="issue">
                 <div class="issue-main"><div class="issue-title">{{ monitor.stores.effective_unassigned }} فروشگاه بدون پوشش کارشناسی</div><div class="issue-desc">برای این فروشگاه‌ها کارشناس فعال تعیین نشده است.</div></div>
-                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/monitor#coverage">بررسی</a>
+                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/data#experts">بررسی</a>
               </div>
               {% endif %}
               {% if monitor.pending_users %}
@@ -162,7 +162,7 @@
 
         <aside class="stack">
           <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">فعالیت کاربران</div><div class="panel-desc">بر اساس آخرین پیام ثبت‌شده در ربات؛ نه وضعیت اتصال دستگاه</div></div><a class="fui-btn fui-btn--ghost fui-btn--sm" href="/monitor#team">جزئیات</a></div>
+            <div class="panel-head"><div><div class="panel-title">فعالیت کاربران</div><div class="panel-desc">بر اساس آخرین پیام ثبت‌شده در ربات؛ نه وضعیت اتصال دستگاه</div></div><a class="fui-btn fui-btn--ghost fui-btn--sm" href="/usage">جزئیات</a></div>
             <div class="panel-body rows">
               <div class="row"><span class="row-name">فعال در ۱۵ دقیقه اخیر</span><span class="row-value">{{ monitor.states.online }}</span></div>
               <div class="row"><span class="row-name">فعال در ۶ ساعت اخیر</span><span class="row-value">{{ monitor.states.recent }}</span></div>

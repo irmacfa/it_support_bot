@@ -2,184 +2,151 @@
 <html lang="fa" dir="rtl">
 <head>
 {% include "_layout_head.html" %}
-<title>داشبورد مدیریتی | IT Support</title>
+<title>داشبورد | IT Support</title>
 <style>
-:root{--dash-radius:18px}
-.dash{display:flex;flex-direction:column;gap:18px;max-width:1600px;margin:auto}
-.dash-hero{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 24px;border:1px solid var(--fui-border);border-radius:var(--dash-radius);background:linear-gradient(135deg,color-mix(in srgb,var(--fui-primary) 11%,var(--fui-card)),var(--fui-card))}
-.dash-hero h1{font-size:1.25rem;margin:0 0 6px;font-weight:850}
-.dash-muted{color:var(--fui-muted-foreground);font-size:.82rem;line-height:1.8}
-.hero-actions{display:flex;gap:8px;flex-wrap:wrap}
+.dash{max-width:1500px;margin:auto;display:flex;flex-direction:column;gap:16px}
+.hero{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px;border:1px solid var(--fui-border);border-radius:18px;background:var(--fui-card)}
+.hero h1{font-size:1.18rem;font-weight:850;margin:0 0 5px}
+.muted{font-size:.8rem;color:var(--fui-muted-foreground);line-height:1.8}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
 .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.kpi{padding:17px;border:1px solid var(--fui-border);border-radius:16px;background:var(--fui-card);min-width:0}
-.kpi-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.kpi-label{font-size:.82rem;color:var(--fui-muted-foreground)}
-.kpi-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--fui-primary) 12%,transparent);font-size:1.1rem}
-.kpi-value{font-size:clamp(1.35rem,2.2vw,1.9rem);font-weight:850;letter-spacing:-.04em;margin:12px 0 3px;white-space:nowrap}
-.kpi-foot{font-size:.76rem;color:var(--fui-muted-foreground)}
-.kpi.good .kpi-icon{background:color-mix(in srgb,var(--fui-success) 14%,transparent)}
-.kpi.warn .kpi-icon{background:color-mix(in srgb,var(--fui-warning) 16%,transparent)}
-.kpi.bad .kpi-icon{background:color-mix(in srgb,var(--fui-destructive) 13%,transparent)}
-.dash-columns{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr);gap:14px;align-items:start}
-.dash-stack{display:flex;flex-direction:column;gap:14px;min-width:0}
-.panel{border:1px solid var(--fui-border);border-radius:var(--dash-radius);background:var(--fui-card);overflow:hidden;min-width:0}
-.panel-head{padding:17px 19px 12px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.panel-title{font-weight:800;font-size:.98rem}
-.panel-body{padding:0 19px 18px}
-.panel-desc{font-size:.77rem;color:var(--fui-muted-foreground);margin-top:4px;line-height:1.7}
-.pill{font-size:.72rem;padding:4px 9px;border:1px solid var(--fui-border);border-radius:999px;white-space:nowrap;color:var(--fui-muted-foreground)}
-.alerts{display:flex;flex-direction:column;gap:8px}
-.alert{display:flex;align-items:flex-start;gap:11px;padding:12px;border-radius:13px;background:var(--fui-muted);min-width:0}
-.alert-mark{width:32px;height:32px;flex:0 0 32px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--fui-primary) 12%,transparent)}
-.alert.crit .alert-mark{background:color-mix(in srgb,var(--fui-destructive) 14%,transparent)}
-.alert.warn .alert-mark{background:color-mix(in srgb,var(--fui-warning) 16%,transparent)}
-.alert-copy{flex:1;min-width:0}
-.alert-copy strong{font-size:.84rem;display:block;margin-bottom:3px}
-.alert-copy span{font-size:.77rem;color:var(--fui-muted-foreground);line-height:1.7;display:block;overflow-wrap:anywhere}
-.activity-chart{height:210px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-items:end;padding-top:8px}
-.day-col{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
-.bar-area{height:160px;width:100%;display:flex;align-items:flex-end;justify-content:center}
-.bar{width:min(34px,72%);min-height:3px;border-radius:9px 9px 4px 4px;background:linear-gradient(180deg,var(--fui-primary),color-mix(in srgb,var(--fui-primary) 45%,transparent));position:relative}
+.kpi,.panel{background:var(--fui-card);border:1px solid var(--fui-border);border-radius:16px;min-width:0}
+.kpi{padding:16px}
+.kpi-label{font-size:.78rem;color:var(--fui-muted-foreground)}
+.kpi-value{font-size:1.8rem;font-weight:850;margin:9px 0 2px;line-height:1.3}
+.kpi-note{font-size:.72rem;color:var(--fui-muted-foreground)}
+.kpi.warn .kpi-value{color:var(--fui-warning)}
+.kpi.good .kpi-value{color:var(--fui-success)}
+.columns{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(290px,.85fr);gap:14px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:16px 18px 10px}
+.panel-title{font-size:.92rem;font-weight:850}
+.panel-desc{font-size:.74rem;color:var(--fui-muted-foreground);margin-top:4px;line-height:1.7}
+.panel-body{padding:0 18px 16px}
+.count{font-size:.72rem;color:var(--fui-muted-foreground);border:1px solid var(--fui-border);border-radius:99px;padding:3px 8px;white-space:nowrap}
+.issue-list,.rows{display:flex;flex-direction:column}
+.issue{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--fui-border)}
+.issue:last-child,.row:last-child{border-bottom:0}
+.issue-main{min-width:0}
+.issue-title{font-size:.82rem;font-weight:750}
+.issue-desc{font-size:.72rem;color:var(--fui-muted-foreground);margin-top:3px;line-height:1.7}
+.issue-link{white-space:nowrap;text-decoration:none}
+.empty{padding:20px 8px;text-align:center;color:var(--fui-muted-foreground);font-size:.8rem}
+.activity{height:170px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px;align-items:end;padding:10px 0 0}
+.day{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.track{height:125px;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.bar{width:min(30px,70%);min-height:3px;border-radius:8px 8px 3px 3px;background:var(--fui-primary);position:relative}
 .bar.zero{background:var(--fui-border)}
-.bar-value{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:.7rem;font-weight:750;color:var(--fui-muted-foreground)}
-.day-name{font-size:.75rem;font-weight:750}
-.day-date{font-size:.68rem;color:var(--fui-muted-foreground)}
-.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.legend span{font-size:.72rem;color:var(--fui-muted-foreground);padding:4px 8px;background:var(--fui-muted);border-radius:8px}
-.rows{display:flex;flex-direction:column}
-.row-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--fui-border);min-width:0}
-.row-item:last-child{border-bottom:0}
-.row-main{display:flex;align-items:center;gap:9px;min-width:0}
-.row-main>div{min-width:0}
-.row-name{font-size:.83rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row-sub{font-size:.72rem;color:var(--fui-muted-foreground);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row-number{font-size:.78rem;font-weight:800;white-space:nowrap}
-.status-dot{width:9px;height:9px;border-radius:50%;background:var(--fui-success);flex:0 0 9px}
-.status-dot.recent{background:#22b8cf}.status-dot.idle{background:var(--fui-warning)}.status-dot.off{background:var(--fui-muted-foreground)}
-.coverage{display:flex;flex-direction:column;gap:13px}
-.coverage-line{display:flex;justify-content:space-between;gap:8px;font-size:.78rem;margin-bottom:6px}
-.coverage-track{height:7px;background:var(--fui-muted);border-radius:99px;overflow:hidden}
-.coverage-fill{height:100%;background:var(--fui-primary);border-radius:99px}
-.quick-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.quick{display:flex;align-items:center;gap:9px;padding:11px;border:1px solid var(--fui-border);border-radius:12px;text-decoration:none;color:inherit;transition:.15s}
+.bar b{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:.68rem}
+.day strong{font-size:.72rem}.day small{font-size:.65rem;color:var(--fui-muted-foreground)}
+.legend{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.legend span{font-size:.68rem;color:var(--fui-muted-foreground);background:var(--fui-muted);padding:4px 7px;border-radius:7px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--fui-border)}
+.row-name{font-size:.8rem;font-weight:700}.row-value{font-size:.8rem;font-weight:850;white-space:nowrap}
+.links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.quick{display:flex;align-items:center;gap:9px;padding:11px;border:1px solid var(--fui-border);border-radius:11px;text-decoration:none;color:inherit;min-width:0}
 .quick:hover{border-color:var(--fui-primary);background:color-mix(in srgb,var(--fui-primary) 5%,transparent)}
-.quick-icon{font-size:1.1rem}
-.quick strong{font-size:.78rem;display:block}
-.quick small{font-size:.68rem;color:var(--fui-muted-foreground)}
-.empty{padding:22px;text-align:center;color:var(--fui-muted-foreground);font-size:.82rem}
-@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-columns{grid-template-columns:1fr}}
-@media(max-width:620px){.dash-hero{align-items:flex-start;flex-direction:column;padding:17px}.kpis{gap:8px}.kpi{padding:12px}.kpi-value{font-size:1.35rem}.kpi-label{font-size:.74rem}.quick-links{grid-template-columns:1fr}.panel-head{padding:14px 14px 10px}.panel-body{padding:0 14px 14px}.activity-chart{gap:4px}.bar-area{height:135px}.activity-chart{height:180px}}
+.quick-icon{font-size:1.05rem}.quick strong{display:block;font-size:.76rem}.quick small{font-size:.67rem;color:var(--fui-muted-foreground)}
+@media(max-width:1050px){.columns{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.hero{align-items:flex-start;flex-direction:column;padding:16px}.kpis{gap:8px}.kpi{padding:12px}.kpi-value{font-size:1.45rem}.panel-head{padding:14px 14px 9px}.panel-body{padding:0 14px 14px}.links{grid-template-columns:1fr}.activity{gap:4px}}
 </style>
 </head>
 <body>
 {% include "_sidebar.html" %}
 <div class="main">
   <div class="topbar">
-    <span>داشبورد مدیریتی</span>
+    <span>داشبورد</span>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="fui-badge fui-badge--outline">آخرین محاسبه: {{ monitor.generated_jalali }}</span>
+      <span class="fui-badge fui-badge--outline">به‌روزرسانی: {{ monitor.generated_jalali }}</span>
       <a class="fui-btn fui-btn--outline fui-btn--sm" href="/logout">خروج</a>
     </div>
   </div>
   <div class="content">
     <main class="dash">
-      <section class="dash-hero">
+      <section class="hero">
         <div>
-          <h1>مرکز عملیات پشتیبانی IT</h1>
-          <div class="dash-muted">نمای کلی کاربران، پوشش فروشگاه‌ها، فعالیت ربات و موارد نیازمند پیگیری</div>
-          <div class="dash-muted">زمان تولید اطلاعات: {{ monitor.generated_jalali }}{% if monitor.load_ms is not none %} · زمان پردازش: {{ monitor.load_ms }} میلی‌ثانیه{% endif %}</div>
+          <h1>نمای کلی عملیات پشتیبانی IT</h1>
+          <div class="muted">وضعیت فعالیت امروز، اطلاعات فروشگاه‌ها و مواردی که نیاز به پیگیری دارند.</div>
+          <div class="muted">آخرین محاسبه: {{ monitor.generated_jalali }}{% if monitor.load_ms is not none %} · {{ monitor.load_ms }} میلی‌ثانیه{% endif %}</div>
         </div>
-        <div class="hero-actions">
-          <a class="fui-btn fui-btn--outline fui-btn--sm" href="/monitor">پایش و جزئیات</a>
+        <div class="actions">
           <a class="fui-btn fui-btn--sm" href="/usage">گزارش عملکرد</a>
-          <a class="fui-btn fui-btn--outline fui-btn--sm" href="/dashboard">به‌روزرسانی</a>
+          <a class="fui-btn fui-btn--outline fui-btn--sm" href="/dashboard">به‌روزرسانی صفحه</a>
         </div>
       </section>
 
-      <section class="kpis" aria-label="شاخص‌های کلیدی">
-        <article class="kpi">
-          <div class="kpi-top"><span class="kpi-label">کاربران ثبت‌شده</span><span class="kpi-icon">👥</span></div>
-          <div class="kpi-value">{{ monitor.total_users }}</div>
-          <div class="kpi-foot">{{ monitor.pending_users }} نفر در انتظار تأیید</div>
-        </article>
+      <section class="kpis" aria-label="خلاصه وضعیت">
         <article class="kpi good">
-          <div class="kpi-top"><span class="kpi-label">فعال امروز</span><span class="kpi-icon">⚡</span></div>
+          <div class="kpi-label">کاربران فعال امروز</div>
           <div class="kpi-value">{{ monitor.active_today }}</div>
-          <div class="kpi-foot">کاربر دارای پیام یا اقدام ثبت‌شده امروز</div>
+          <div class="kpi-note">از {{ monitor.total_users }} کاربر ثبت‌شده و مشاهده‌شده</div>
         </article>
-        <article class="kpi">
-          <div class="kpi-top"><span class="kpi-label">فروشگاه‌های فعال</span><span class="kpi-icon">🏪</span></div>
-          <div class="kpi-value">{{ monitor.stores.total }}</div>
-          <div class="kpi-foot">{{ monitor.stores.closed }} فروشگاه بسته، جدا از آمار فعال</div>
+        <article class="kpi {% if monitor.pending_users %}warn{% else %}good{% endif %}">
+          <div class="kpi-label">ثبت‌نام در انتظار تأیید</div>
+          <div class="kpi-value">{{ monitor.pending_users }}</div>
+          <div class="kpi-note">کاربرانی که هنوز تأیید نشده‌اند</div>
         </article>
         <article class="kpi {% if monitor.stores.effective_unassigned %}warn{% else %}good{% endif %}">
-          <div class="kpi-top"><span class="kpi-label">فروشگاه نیازمند تعیین کارشناس</span><span class="kpi-icon">🧭</span></div>
+          <div class="kpi-label">فروشگاه نیازمند تعیین کارشناس</div>
           <div class="kpi-value">{{ monitor.stores.effective_unassigned }}</div>
-          <div class="kpi-foot">{{ monitor.stores.effective_pct }}٪ از فروشگاه‌های فعال</div>
-        </article>
-        <article class="kpi good">
-          <div class="kpi-top"><span class="kpi-label">آنلاین در ۱۵ دقیقه اخیر</span><span class="kpi-icon">●</span></div>
-          <div class="kpi-value">{{ monitor.states.online }}</div>
-          <div class="kpi-foot">بر اساس آخرین فعالیت ثبت‌شده</div>
+          <div class="kpi-note">{{ monitor.stores.effective_pct }}٪ از فروشگاه‌های فعال</div>
         </article>
         <article class="kpi">
-          <div class="kpi-top"><span class="kpi-label">فعال در ۶ ساعت اخیر</span><span class="kpi-icon">◷</span></div>
-          <div class="kpi-value">{{ monitor.states.recent }}</div>
-          <div class="kpi-foot">{{ monitor.states.idle }} نفر کم‌فعال یا غیرفعال</div>
-        </article>
-        <article class="kpi">
-          <div class="kpi-top"><span class="kpi-label">اقدامات ۷ روز اخیر</span><span class="kpi-icon">↗</span></div>
-          <div class="kpi-value">{{ monitor.week_total }}</div>
-          <div class="kpi-foot">{{ monitor.week_people }} حضور روزانه کاربر در مجموع روزها</div>
-        </article>
-        <article class="kpi {% if monitor.stores.separated_count %}warn{% else %}good{% endif %}">
-          <div class="kpi-top"><span class="kpi-label">فروشگاه‌های با کارشناس منفک</span><span class="kpi-icon">⚠</span></div>
-          <div class="kpi-value">{{ monitor.stores.separated_count }}</div>
-          <div class="kpi-foot">{{ monitor.stores.separated_groups|length }} گروه کارشناسی منفک</div>
+          <div class="kpi-label">فروشگاه‌های فعال</div>
+          <div class="kpi-value">{{ monitor.stores.total }}</div>
+          <div class="kpi-note">{{ monitor.stores.closed }} فروشگاه بسته، خارج از این آمار</div>
         </article>
       </section>
 
-      <div class="dash-columns">
-        <div class="dash-stack">
+      <div class="columns">
+        <div class="stack">
           <section class="panel">
             <div class="panel-head">
-              <div><div class="panel-title">هشدارها و موارد نیازمند پیگیری</div><div class="panel-desc">بر اساس وضعیت فعلی داده‌های ثبت‌شده</div></div>
-              <span class="pill">{{ monitor.alerts|length }} مورد</span>
+              <div><div class="panel-title">موارد نیازمند پیگیری</div><div class="panel-desc">فقط موارد عملیاتی مرتبط با اطلاعات فروشگاه‌ها و ثبت‌نام کاربران</div></div>
             </div>
-            <div class="panel-body">
-              {% if monitor.alerts %}
-              <div class="alerts">
-                {% for a in monitor.alerts %}
-                <div class="alert {{ a.level }}">
-                  <div class="alert-mark">{{ a.icon }}</div>
-                  <div class="alert-copy"><strong>{{ a.title }}</strong><span>{{ a.body }}</span></div>
-                  {% if a.link %}<a class="fui-btn fui-btn--ghost fui-btn--sm" href="{{ a.link }}">بررسی</a>{% endif %}
-                </div>
-                {% endfor %}
+            <div class="panel-body issue-list">
+              {% set has_issues = monitor.stores.effective_unassigned or monitor.pending_users or monitor.stores.separated_count %}
+              {% if monitor.stores.separated_count %}
+              <div class="issue">
+                <div class="issue-main"><div class="issue-title">{{ monitor.stores.separated_count }} فروشگاه با کارشناس منفک</div><div class="issue-desc">مسئولیت این فروشگاه‌ها باید دوباره بررسی شود.</div></div>
+                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/data#panel-experts">بررسی</a>
               </div>
-              {% else %}
-              <div class="empty">در حال حاضر هشداری در داده‌های پایش ثبت نشده است.</div>
+              {% endif %}
+              {% if monitor.stores.effective_unassigned %}
+              <div class="issue">
+                <div class="issue-main"><div class="issue-title">{{ monitor.stores.effective_unassigned }} فروشگاه بدون پوشش کارشناسی</div><div class="issue-desc">برای این فروشگاه‌ها کارشناس فعال تعیین نشده است.</div></div>
+                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/data#panel-experts">بررسی</a>
+              </div>
+              {% endif %}
+              {% if monitor.pending_users %}
+              <div class="issue">
+                <div class="issue-main"><div class="issue-title">{{ monitor.pending_users }} ثبت‌نام در انتظار تأیید</div><div class="issue-desc">درخواست‌های عضویت تأییدنشده را بررسی کنید.</div></div>
+                <a class="fui-btn fui-btn--outline fui-btn--sm issue-link" href="/users">بررسی</a>
+              </div>
+              {% endif %}
+              {% if not has_issues %}
+              <div class="empty">در حال حاضر موردی برای پیگیری در این شاخص‌ها ثبت نشده است.</div>
               {% endif %}
             </div>
           </section>
 
           <section class="panel">
             <div class="panel-head">
-              <div><div class="panel-title">روند فعالیت هفت روز اخیر</div><div class="panel-desc">مجموع درخواست‌های شارژ، اطلاعات، شیفت و ریست رمز در هر روز</div></div>
-              <span class="pill">جمع: {{ monitor.week_total }}</span>
+              <div><div class="panel-title">فعالیت سامانه در ۷ روز اخیر</div><div class="panel-desc">مجموع استفاده از خدمات شارژ، اطلاعات فروشگاه، برنامه شیفت و ریست رمز</div></div>
+              <span class="count">{{ monitor.week_total }} اقدام</span>
             </div>
             <div class="panel-body">
-              <div class="activity-chart">
+              <div class="activity">
                 {% for s in monitor.series %}
-                <div class="day-col">
-                  <div class="bar-area">
+                <div class="day">
+                  <div class="track">
                     {% set max_total = monitor.week_peak.total if monitor.week_peak and monitor.week_peak.total > 0 else 1 %}
-                    {% set bar_h = (s.total * 142 / max_total)|int %}
+                    {% set bar_h = (s.total * 112 / max_total)|int %}
                     <div class="bar {% if not s.total %}zero{% endif %}" style="height:{{ [bar_h,3]|max }}px">
-                      {% if s.total %}<span class="bar-value">{{ s.total }}</span>{% endif %}
+                      {% if s.total %}<b>{{ s.total }}</b>{% endif %}
                     </div>
                   </div>
-                  <span class="day-name">{{ s.day }}</span><span class="day-date">{{ s.label }}</span>
+                  <strong>{{ s.day }}</strong><small>{{ s.label }}</small>
                 </div>
                 {% endfor %}
               </div>
@@ -191,75 +158,28 @@
               </div>
             </div>
           </section>
-
-          <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">پوشش فروشگاه‌ها به تفکیک منطقه</div><div class="panel-desc">درصد پوشش بر اساس فروشگاه‌های فعال و تخصیص کارشناس</div></div><a class="fui-btn fui-btn--outline fui-btn--sm" href="/monitor#coverage">جزئیات</a></div>
-            <div class="panel-body">
-              {% if monitor.stores.by_region %}
-              <div class="coverage">
-                {% for r in monitor.stores.by_region[:12] %}
-                <div>
-                  <div class="coverage-line"><strong>{{ r.region }}</strong><span>{{ r.total - r.unassigned }} از {{ r.total }} · {{ 100 - r.pct }}٪</span></div>
-                  <div class="coverage-track"><div class="coverage-fill" style="width:{{ [100 - r.pct,100]|min }}%"></div></div>
-                </div>
-                {% endfor %}
-              </div>
-              {% else %}<div class="empty">اطلاعات منطقه‌ای در دسترس نیست.</div>{% endif %}
-            </div>
-          </section>
         </div>
 
-        <aside class="dash-stack">
+        <aside class="stack">
           <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">وضعیت حضور کارشناسان</div><div class="panel-desc">بر پایه آخرین فعالیت ثبت‌شده در ربات</div></div><a class="fui-btn fui-btn--ghost fui-btn--sm" href="/monitor#team">تیم</a></div>
+            <div class="panel-head"><div><div class="panel-title">فعالیت کاربران</div><div class="panel-desc">بر اساس آخرین پیام ثبت‌شده در ربات؛ نه وضعیت اتصال دستگاه</div></div><a class="fui-btn fui-btn--ghost fui-btn--sm" href="/usage">جزئیات</a></div>
             <div class="panel-body rows">
-              <div class="row-item"><div class="row-main"><span class="status-dot"></span><span class="row-name">آنلاین · کمتر از ۱۵ دقیقه</span></div><span class="row-number">{{ monitor.states.online }}</span></div>
-              <div class="row-item"><div class="row-main"><span class="status-dot recent"></span><span class="row-name">اخیراً فعال · کمتر از ۶ ساعت</span></div><span class="row-number">{{ monitor.states.recent }}</span></div>
-              <div class="row-item"><div class="row-main"><span class="status-dot idle"></span><span class="row-name">غیرفعال · بیش از ۶ ساعت</span></div><span class="row-number">{{ monitor.states.idle }}</span></div>
-              <div class="row-item"><div class="row-main"><span class="status-dot off"></span><span class="row-name">بدون سابقه استفاده</span></div><span class="row-number">{{ monitor.states.unseen }}</span></div>
+              <div class="row"><span class="row-name">فعال در ۱۵ دقیقه اخیر</span><span class="row-value">{{ monitor.states.online }}</span></div>
+              <div class="row"><span class="row-name">فعال در ۶ ساعت اخیر</span><span class="row-value">{{ monitor.states.recent }}</span></div>
+              <div class="row"><span class="row-name">بیش از ۶ ساعت بدون فعالیت</span><span class="row-value">{{ monitor.states.idle }}</span></div>
+              <div class="row"><span class="row-name">بدون سابقه فعالیت</span><span class="row-value">{{ monitor.states.unseen }}</span></div>
             </div>
           </section>
 
           <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">پرتقاضاترین فروشگاه‌ها</div><div class="panel-desc">بر اساس تعداد درخواست‌های ثبت‌شده</div></div><a class="fui-btn fui-btn--ghost fui-btn--sm" href="/usage">گزارش</a></div>
-            <div class="panel-body">
-              {% if monitor.hot_stores %}
-              <div class="rows">
-                {% for s in monitor.hot_stores[:7] %}
-                <div class="row-item"><div class="row-main"><span class="pill">{{ loop.index }}</span><div><div class="row-name">{{ s.code }}</div><div class="row-sub">{{ s.location or 'محل ثبت نشده' }}</div></div></div><span class="row-number">{{ s.total }}</span></div>
-                {% endfor %}
-              </div>
-              {% else %}<div class="empty">هنوز درخواست فروشگاهی ثبت نشده است.</div>{% endif %}
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">کارشناسان پاسخ‌گوی شارژ</div><div class="panel-desc">رتبه‌بندی بر اساس تعداد پاسخ‌ها</div></div></div>
-            <div class="panel-body">
-              {% if monitor.admins %}
-              <div class="rows">{% for a in monitor.admins[:5] %}<div class="row-item"><div class="row-main"><span class="pill">{{ loop.index }}</span><span class="row-name">{{ a.get('name') or a.get('full_name') or a.user_id }}</span></div><span class="row-number">{{ a.responded_count }}</span></div>{% endfor %}</div>
-              {% else %}<div class="empty">هنوز پاسخی برای رتبه‌بندی ثبت نشده است.</div>{% endif %}
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">مسئولان ریست رمز</div><div class="panel-desc">رتبه‌بندی بر اساس تعداد رسیدگی</div></div></div>
-            <div class="panel-body">
-              {% if monitor.reset_admins %}
-              <div class="rows">{% for a in monitor.reset_admins[:5] %}<div class="row-item"><div class="row-main"><span class="pill">{{ loop.index }}</span><span class="row-name">{{ a.name or a.user_id }}</span></div><span class="row-number">{{ a.responded_count }}</span></div>{% endfor %}</div>
-              {% else %}<div class="empty">هنوز داده‌ای برای رتبه‌بندی وجود ندارد.</div>{% endif %}
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head"><div><div class="panel-title">دسترسی سریع</div><div class="panel-desc">مسیرهای اصلی مدیریت پنل</div></div></div>
-            <div class="panel-body quick-links">
-              <a class="quick" href="/upload"><span class="quick-icon">📁</span><span><strong>آپلود فایل</strong><small>اکسل و PDF شیفت</small></span></a>
-              <a class="quick" href="/schedule"><span class="quick-icon">🗓</span><span><strong>برنامه شیفت</strong><small>مشاهده و ویرایش</small></span></a>
-              <a class="quick" href="/users"><span class="quick-icon">👥</span><span><strong>مدیریت کاربران</strong><small>تأیید و دسترسی</small></span></a>
-              <a class="quick" href="/data"><span class="quick-icon">🗂</span><span><strong>اطلاعات فروشگاه</strong><small>جست‌وجو و داده‌ها</small></span></a>
-              <a class="quick" href="/group-auth"><span class="quick-icon">🔐</span><span><strong>احراز هویت گروه</strong><small>مدیریت اعضا</small></span></a>
-              <a class="quick" href="/broadcast"><span class="quick-icon">✉</span><span><strong>ارسال پیام</strong><small>اطلاع‌رسانی</small></span></a>
+            <div class="panel-head"><div><div class="panel-title">دسترسی سریع</div><div class="panel-desc">کارهای پرکاربرد در پنل</div></div></div>
+            <div class="panel-body links">
+              <a class="quick" href="/data"><span class="quick-icon">🏪</span><span><strong>اطلاعات فروشگاه‌ها</strong><small>جست‌وجو و مشاهده اطلاعات</small></span></a>
+              <a class="quick" href="/schedule"><span class="quick-icon">🗓</span><span><strong>برنامه شیفت</strong><small>مشاهده و ویرایش برنامه</small></span></a>
+              <a class="quick" href="/upload"><span class="quick-icon">📁</span><span><strong>به‌روزرسانی فایل‌ها</strong><small>اطلاعات و برنامه شیفت</small></span></a>
+              <a class="quick" href="/users"><span class="quick-icon">👥</span><span><strong>مدیریت کاربران</strong><small>مشاهده کاربران و ثبت‌نام‌ها</small></span></a>
+              <a class="quick" href="/group-auth"><span class="quick-icon">🔐</span><span><strong>احراز هویت گروه</strong><small>وضعیت اعضای گروه</small></span></a>
+              <a class="quick" href="/broadcast"><span class="quick-icon">✉</span><span><strong>ارسال پیام</strong><small>اطلاع‌رسانی به گروه</small></span></a>
             </div>
           </section>
         </aside>

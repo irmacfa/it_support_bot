@@ -6,6 +6,7 @@ import json
 import threading
 from datetime import datetime
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 STORE_PATH = config.DATA_DIR / "known_groups.json"
@@ -24,9 +25,7 @@ def _load() -> None:
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(_groups, f, ensure_ascii=False, indent=2)
+    atomic_write_json(STORE_PATH, _groups)
 
 
 def record(chat_id, title: str) -> None:

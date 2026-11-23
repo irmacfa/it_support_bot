@@ -7,6 +7,7 @@ import json
 import threading
 from datetime import datetime
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 REGISTRY_PATH = config.DATA_DIR / "registered_users.json"
@@ -25,9 +26,7 @@ def _load() -> None:
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
-        json.dump(_registered, f, ensure_ascii=False, indent=2)
+    atomic_write_json(REGISTRY_PATH, _registered)
 
 
 def is_registered(user_id) -> bool:
@@ -59,6 +58,7 @@ def register(user_id, full_name: str, from_user: dict) -> dict:
         "approved": False,
     }
     with _lock:
+        _load()  # پنل و ربات دو پردازش جداگانه‌اند؛ بدون اینجا، تاییدها میپرند
         _registered[str(user_id)] = record
         _save()
     return record

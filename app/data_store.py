@@ -793,7 +793,7 @@ def diff_index(old_index: dict, new_index: dict) -> dict:
             before, after = _values_of_column(old_recs, col), _values_of_column(new_recs, col)
             if before == after:
                 continue
-            if col in core and (", ".join(before) or "—", ", ".join(after) or "—") in seen_pairs:
+            if col in core and ("، ".join(before) or "—", "، ".join(after) or "—") in seen_pairs:
                 continue
             fields[col] = ("، ".join(before) or "—", "، ".join(after) or "—")
             seen_pairs.add(fields[col])

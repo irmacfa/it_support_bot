@@ -50,6 +50,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 SESSION_COOKIE = "panel_session"
 SESSION_TTL = timedelta(hours=12)
 _sessions: dict[str, datetime] = {}
+_sessions_lock = threading.Lock()
 
 # گروهی که اطلاع‌رسانی کارشناسان به آن ارسال می‌شود.
 ANNOUNCE_GROUP_TITLE = "انفورماتیک اوشانک"
@@ -57,17 +58,22 @@ ANNOUNCE_GROUP_TITLE = "انفورماتیک اوشانک"
 
 def _create_session() -> str:
     token = secrets.token_hex(24)
-    _sessions[token] = datetime.now() + SESSION_TTL
+    with _sessions_lock:
+        _sessions[token] = datetime.now() + SESSION_TTL
     return token
 
 
 def _is_authed(request: Request) -> bool:
     token = request.cookies.get(SESSION_COOKIE)
-    if not token or token not in _sessions:
+    if not token:
         return False
-    if datetime.now() > _sessions[token]:
-        del _sessions[token]
-        return False
+    with _sessions_lock:
+        expires = _sessions.get(token)
+        if expires is None:
+            return False
+        if datetime.now() > expires:
+            _sessions.pop(token, None)
+            return False
     return True
 
 
@@ -132,8 +138,14 @@ async def security_middleware(request: Request, call_next):
             parsed = urlsplit(source) if source else None
         except ValueError:
             parsed = None
-        if (not parsed or parsed.scheme != request.url.scheme
-                or parsed.netloc.casefold() != host):
+        # پشت nginx/TLS ممكن است request.url.scheme برابر http باشد ولی مرورگر
+        # Origin را https بفرستد؛ فقط همین حالت استثناست و برعکس آن (Origin=http
+        # وقتی برنامه خودش https میبیند) نباید پذیرفته شود.
+        scheme_ok = bool(parsed) and (
+            parsed.scheme == request.url.scheme
+            or (request.url.scheme == "http" and parsed.scheme == "https")
+        )
+        if (not scheme_ok or parsed.netloc.casefold() != host):
             return JSONResponse(
                 {"ok": False, "error": "مبدأ درخواست معتبر نیست."},
                 status_code=403,
@@ -182,7 +194,8 @@ def login_submit(request: Request, password: str = Form(...)):
 def logout(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
-        _sessions.pop(token, None)
+        with _sessions_lock:
+            _sessions.pop(token, None)
     resp = RedirectResponse("/login", status_code=302)
     resp.delete_cookie(SESSION_COOKIE)
     return resp
@@ -239,9 +252,9 @@ def _active_info_path() -> Path:
     """مسیر فایل فعال اطلاعات، با پسوند واقعی."""
     if config.INFO_EXCEL_PATH.exists():
         return config.INFO_EXCEL_PATH
-    for suffix in (".csv", ".xls", ".xlsx"):
+    for suffix in (".xlsx", ".xlsm", ".csv", ".txt"):
         alt = config.INFO_EXCEL_PATH.with_suffix(suffix)
-        if alt.exists():
+        if alt.is_file():
             return alt
     return config.INFO_EXCEL_PATH
 
@@ -307,7 +320,19 @@ def _safe_filename(name: str) -> str:
     """اسم فایل آپلودی رو پاک‌سازی می‌کنه (جلوگیری از path traversal)."""
     name = Path(name or "file").name
     name = re.sub(r"[^\w.\-؀-ۿ ]+", "_", name, flags=re.UNICODE).strip()
-    return name or "file"
+    # Path("..").name == ".." — بدون این محافظ، توکن `..` به پوشه‌ی والد میرسد.
+    if not name or name in {".", ".."} or not name.strip(". "):
+        return "file"
+    return name
+
+
+def _contained_path(base: Path, name: str) -> Path | None:
+    """لایه‌ی دوم دفاع برای عملیات پاکسازی/بازگردانی با ورودی کاربر."""
+    root = base.resolve()
+    target = (root / name).resolve()
+    if target == root or root not in target.parents:
+        return None
+    return target
 
 
 def _list_backups() -> list[dict]:
@@ -441,6 +466,7 @@ async def _stage_uploads(files: list[UploadFile], mode: str, drop_missing: bool)
         for i, upload in enumerate(files):
             name = _safe_filename(upload.filename)
             if Path(name).suffix.lower() not in data_store.SUPPORTED_SUFFIXES:
+                await upload.close()
                 continue
             sub_dir = folder / str(i)
             sub_dir.mkdir(parents=True, exist_ok=True)
@@ -494,8 +520,11 @@ def carry_over_info_sheets(path: Path) -> list[str]:
     که فقط توی فایل ما بودن از بین می‌رن. برای همین قبل از اعمال (و همون اول
     پیش‌نمایش) شیت‌های جاافتاده از فایل فعلی به فایل جدید منتقل می‌شن.
     """
-    current = config.INFO_EXCEL_PATH
-    if not current.exists():
+    current = _active_info_path()
+    if not current.is_file():
+        return []
+    if current.suffix.lower() not in {".xlsx", ".xlsm"}:
+        app_logger.warning("فایل اطلاعات فعلی اکسل نیست؛ شیت‌های قبلی قابل انتقال نیستند: %s", current)
         return []
     if current.resolve() == Path(path).resolve():
         return []
@@ -617,6 +646,64 @@ def _make_info_backup(protect: str = "") -> str | None:
     return stamp
 
 
+def _info_target_for_backup(source: Path) -> Path:
+    """مقصد بازگردانی را بر اساس پسوند نسخه پشتیبان تعیین میکند.
+
+    نسخه‌های پشتیبان با پسوند واقعی فایل فعال ذخیره میشوند؛ بنابراین کپی کردن
+    یک پشتیبان xlsx روی info_stores.csv، فایل CSV را خراب میکند.
+    """
+    suffix = source.suffix.lower()
+    if suffix in data_store.EXCEL_SUFFIXES:
+        return config.INFO_EXCEL_PATH
+    if suffix in {".csv", ".txt"}:
+        return config.INFO_EXCEL_PATH.with_suffix(suffix)
+    raise ValueError(f"پسوند پشتیبان پشتیبانی نمی‌شود: {suffix or '(بدون پسوند)'}")
+
+
+def _restore_info_file(source: Path, protect: str | None = None) -> tuple[bool, str]:
+    """یک نسخه پشتیبان را بازگردانی میکند و کش ایندکس را تازه میسازد."""
+    if protect:
+        _make_info_backup(protect=protect)
+
+    target = _info_target_for_backup(source)
+    active = _active_info_path()
+    previous = None
+    if active.exists():
+        previous = active.with_name(f".{active.name}.restore-{secrets.token_hex(6)}")
+        shutil.copy2(active, previous)
+    try:
+        shutil.copy2(source, target)
+        if active != target:
+            active.unlink(missing_ok=True)
+        config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
+        ok, msg = info_store.reload_info()
+        if not ok:
+            raise RuntimeError(msg)
+        return True, msg
+    except Exception as exc:  # noqa: BLE001
+        target.unlink(missing_ok=True)
+        if active != target:
+            active.unlink(missing_ok=True)
+        if previous and previous.exists():
+            shutil.copy2(previous, active)
+            previous.unlink(missing_ok=True)
+            info_store.reload_info()
+        app_logger.exception("بازگردانی فایل اطلاعات ناموفق بود.")
+        return False, f"بازگردانی ناموفق بود؛ فایل قبلی حفظ شد: {exc}"
+
+
+def _restore_info_backup(stamp: str) -> bool:
+    """نسخه‌ی پشتیبانِ ``stamp`` رو روی فایل فعال اطلاعات برمیگردونه."""
+    matches = sorted(config.INFO_BACKUP_DIR.glob(f"{stamp}.*"))
+    if not matches:
+        app_logger.error("نسخه‌ی پشتیبان «%s» پیدا نشد؛ بازگردانی انجام نشد.", stamp)
+        return False
+    ok, _msg = _restore_info_file(matches[-1])
+    if not ok:
+        app_logger.error("بازگردانی نسخه‌ی پشتیبان «%s» ناموفق بود.", stamp)
+    return ok
+
+
 def _commit_info_files(staged: list[Path]) -> tuple[Path, list[str], Path | None, Path | None]:
     """Prepare the incoming workbook and atomically replace the active file."""
     base = staged[0]
@@ -674,36 +761,45 @@ def _finish_info_commit(destination: Path, previous: Path | None,
         os.replace(previous, previous_original)
 
 
+_dataset_commit_lock = threading.RLock()
+
+
 def _apply_dataset(key: str, staged: list[Path], mode: str, drop_missing: bool) -> tuple[bool, str, dict]:
-    """Replace source files transactionally with the matching in-memory index."""
-    mod = _engine_for(key)
-    if key == "charge":
-        _make_backup()
-        previous = _commit_store_files(staged)
-        active = [config.STORE_FILES_DIR / _active_name(p) for p in staged]
-        try:
-            result = mod.commit_upload(active, mode, drop_missing)
-            _finish_store_commit(previous, bool(result[0]))
-            if not result[0]:
+    """Replace source files transactionally with the matching in-memory index.
+
+    Several endpoints run in FastAPI's threadpool; without this lock two parallel
+    applies can interleave file swaps and snapshot writes and leave disk/index out
+    of sync.
+    """
+    with _dataset_commit_lock:
+        mod = _engine_for(key)
+        if key == "charge":
+            _make_backup()
+            previous = _commit_store_files(staged)
+            active = [config.STORE_FILES_DIR / _active_name(p) for p in staged]
+            try:
+                result = mod.commit_upload(active, mode, drop_missing)
+                _finish_store_commit(previous, bool(result[0]))
+                if not result[0]:
+                    mod.reload_data()
+                return result
+            except Exception:
+                _finish_store_commit(previous, False)
                 mod.reload_data()
+                raise
+
+        _make_info_backup()
+        destination, _carried, previous, previous_original = _commit_info_files(staged)
+        try:
+            result = mod.commit_upload([destination], mode, drop_missing)
+            _finish_info_commit(destination, previous, previous_original, bool(result[0]))
+            if not result[0]:
+                mod.reload_info()
             return result
         except Exception:
-            _finish_store_commit(previous, False)
-            mod.reload_data()
-            raise
-
-    _make_info_backup()
-    destination, _carried, previous, previous_original = _commit_info_files(staged)
-    try:
-        result = mod.commit_upload([destination], mode, drop_missing)
-        _finish_info_commit(destination, previous, previous_original, bool(result[0]))
-        if not result[0]:
+            _finish_info_commit(destination, previous, previous_original, False)
             mod.reload_info()
-        return result
-    except Exception:
-        _finish_info_commit(destination, previous, previous_original, False)
-        mod.reload_info()
-        raise
+            raise
 
 
 @app.post("/upload", response_class=HTMLResponse)
@@ -825,9 +921,9 @@ def upload_apply(request: Request, token: str = Form(...)):
         return RedirectResponse("/login", status_code=302)
 
     safe = _safe_filename(token)
-    folder = config.UPLOAD_STAGING_DIR / safe
-    work_dir = config.UPLOAD_STAGING_DIR / (safe + "-routed")
-    if not folder.is_dir():
+    folder = _contained_path(config.UPLOAD_STAGING_DIR, safe)
+    work_dir = _contained_path(config.UPLOAD_STAGING_DIR, safe + "-routed")
+    if not folder or not folder.is_dir():
         return templates.TemplateResponse(
             "upload.html", _upload_ctx(request, flash={"message": "فایل آپلودشده پیدا نشد (منقضی شده). "
                                                           "دوباره آپلود کن.", "success": False}),
@@ -872,8 +968,10 @@ def upload_apply(request: Request, token: str = Form(...)):
                 if key == "info" and before and _tables_unchanged(before, _get_excel_columns(_active_info_path())):
                     _notify_file_updated("اطلاعات")
     finally:
-        shutil.rmtree(folder, ignore_errors=True)
-        shutil.rmtree(work_dir, ignore_errors=True)
+        if folder:
+            shutil.rmtree(folder, ignore_errors=True)
+        if work_dir:
+            shutil.rmtree(work_dir, ignore_errors=True)
 
     if ok_all and lines and config.ADMIN_CHAT_ID:
         bale_bot.send_message(config.ADMIN_CHAT_ID,
@@ -893,8 +991,10 @@ def upload_cancel(request: Request, token: str = Form(...)):
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
     safe = _safe_filename(token)
-    shutil.rmtree(config.UPLOAD_STAGING_DIR / safe, ignore_errors=True)
-    shutil.rmtree(config.UPLOAD_STAGING_DIR / (safe + "-routed"), ignore_errors=True)
+    for path in (_contained_path(config.UPLOAD_STAGING_DIR, safe),
+                 _contained_path(config.UPLOAD_STAGING_DIR, safe + "-routed")):
+        if path:
+            shutil.rmtree(path, ignore_errors=True)
     return templates.TemplateResponse(
         "upload.html", _upload_ctx(request, flash={"message": "آپلود لغو شد؛ هیچ تغییری اعمال نشد.",
                                                    "success": False}),
@@ -936,14 +1036,23 @@ def info_rescan_page(request: Request):
     return RedirectResponse("/upload", status_code=302)
 
 
+def _with_dataset_lock(fn):
+    """اجرای عملیات تغییر دیتا تحت قفل سراسری."""
+    def wrapper(*args, **kwargs):
+        with _dataset_commit_lock:
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+@_with_dataset_lock
 def _restore(request: Request, key: str, backup: str):
     """بازگرداندن یکی از نسخه‌های پشتیبانِ مجموعه‌داده."""
     if not _is_authed(request):
         return RedirectResponse("/login", status_code=302)
     meta = DATASET_META[key]
     if key == "charge":
-        folder = config.STORE_BACKUP_DIR / _safe_filename(backup)
-        if not folder.is_dir() or not any(folder.iterdir()):
+        folder = _contained_path(config.STORE_BACKUP_DIR, _safe_filename(backup))
+        if not folder or not folder.is_dir() or not any(folder.iterdir()):
             return templates.TemplateResponse(
                 "upload.html", _upload_ctx(request, flash={"message": "نسخه‌ی پشتیبان پیدا نشد.",
                                                           "success": False}),
@@ -958,16 +1067,13 @@ def _restore(request: Request, key: str, backup: str):
                 shutil.copy2(path, config.STORE_FILES_DIR / _active_name(path))
         ok, msg = data_store.reload_data()
     else:
-        source = config.INFO_BACKUP_DIR / _safe_filename(backup)
-        if not source.is_file():
+        source = _contained_path(config.INFO_BACKUP_DIR, _safe_filename(backup))
+        if not source or not source.is_file():
             return templates.TemplateResponse(
                 "upload.html", _upload_ctx(request, flash={"message": "نسخه‌ی پشتیبان پیدا نشد.",
                                                           "success": False}),
             )
-        _make_info_backup(protect=source.name)
-        shutil.copy2(source, _active_info_path())
-        config.INFO_SNAPSHOT_PATH.unlink(missing_ok=True)
-        ok, msg = info_store.reload_info()
+        ok, msg = _restore_info_file(source, protect=source.name)
     return templates.TemplateResponse(
         "upload.html",
         _upload_ctx(request,
@@ -1002,21 +1108,42 @@ async def upload_schedule(request: Request, schedule_file: UploadFile = File(...
     if Path(_safe_filename(schedule_file.filename or "")).suffix.lower() in data_store.SUPPORTED_SUFFIXES:
         return await upload_file(request=request, files=[schedule_file], mode="merge", drop_missing="")
 
-    ctx = _upload_ctx(request)
-
-    if not schedule_file.filename.endswith(".pdf"):
+    filename = schedule_file.filename or ""
+    invalid_pdf_message = ("برنامه‌ی شیفت باید PDF باشه. اگه منظورت فایل اطلاعات "
+                           "فروشگاه‌هاست، همون فرم بالا رو استفاده کن.")
+    if Path(_safe_filename(filename)).suffix.lower() != ".pdf":
         return templates.TemplateResponse(
             "upload.html",
-            {**ctx, "schedule_message": "برنامه‌ی شیفت باید PDF باشه. اگه منظورت فایل اطلاعات "
-                                        "فروشگاه‌هاست، همون فرم بالا رو استفاده کن.", "schedule_success": False},
+            {**_upload_ctx(request), "schedule_message": invalid_pdf_message,
+             "schedule_success": False},
+        )
+
+    contents = await schedule_file.read()
+    if not contents.lstrip().startswith(b"%PDF-"):
+        return templates.TemplateResponse(
+            "upload.html",
+            {**_upload_ctx(request), "schedule_message": "فایل PDF معتبر نیست؛ فایل قبلی دستکاری نشد.",
+             "schedule_success": False},
         )
 
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    contents = await schedule_file.read()
+    previous_pdf = schedule_store.PDF_PATH.with_suffix(".pdf.previous")
+    if schedule_store.PDF_PATH.exists():
+        shutil.copy2(schedule_store.PDF_PATH, previous_pdf)
     with open(schedule_store.PDF_PATH, "wb") as f:
         f.write(contents)
 
     ok, msg = schedule_store.reload_schedule()
+    if not ok:
+        if previous_pdf.exists():
+            shutil.copy2(previous_pdf, schedule_store.PDF_PATH)
+            schedule_store.reload_schedule()
+            msg += " فایل قبلی برگردانده شد."
+        else:
+            schedule_store.PDF_PATH.unlink(missing_ok=True)
+            msg += " فایل نامعتبر حذف شد؛ فایل قبلی وجود نداشت."
+    previous_pdf.unlink(missing_ok=True)
+    ctx = _upload_ctx(request)
 
     if ok and config.ADMIN_CHAT_ID:
         bale_bot.send_message(config.ADMIN_CHAT_ID, "📄 فایل شیفت آپدیت شد.")
@@ -1066,7 +1193,6 @@ async def schedule_day_update(request: Request, payload: dict = Body(...)):
     return JSONResponse({"ok": True, "message": "✅ شیفت این روز بروزرسانی شد.", "record": record})
 
 
-@app.post("/info/upload", response_class=HTMLResponse)
 @app.get("/users", response_class=HTMLResponse)
 def users_page(request: Request):
     if not _is_authed(request):
@@ -1445,7 +1571,7 @@ def _build_monitor_stores() -> dict:
     unset = info_store.EXPERT_UNSET
 
     active = [r for r in dir_rows
-              if str(r.get(info_store.INFO_CODE_COL) or "").strip() not in closed]
+              if info_store._normalize_code(r.get(info_store.INFO_CODE_COL)) not in closed]
 
     plain_unassigned = []
     separated = []
@@ -1454,7 +1580,7 @@ def _build_monitor_stores() -> dict:
     region_total: dict[str, int] = {}
 
     for r in active:
-        code = str(r.get(info_store.INFO_CODE_COL) or "").strip()
+        code = info_store._normalize_code(r.get(info_store.INFO_CODE_COL))
         expert = str(r.get(info_store.EXPERT_COLUMN) or "").strip()
         region = str(r.get("منطقه نهائی") or r.get("منطقه فروش") or "").strip() or "نامشخص"
         name = str(r.get("فروشگاه") or r.get("نام فروشگاه") or "").strip()
@@ -2139,32 +2265,6 @@ def group_auth_remind(request: Request, chat_id: str = Form(...)):
     )
 
 
-@app.get("/closed-stores", response_class=HTMLResponse)
-def closed_stores_page(request: Request):
-    if not _is_authed(request):
-        return RedirectResponse("/login", status_code=302)
-
-    closed = info_store.closed_codes()
-    dir_rows, _ = info_store.get_directory_rows()
-    items = []
-    for r in dir_rows:
-        code = info_store._normalize_code(r.get(info_store.INFO_CODE_COL))
-        if code and code in closed:
-            items.append({
-                "code": code,
-                "name": str(r.get("فروشگاه") or r.get("نام فروشگاه") or "").strip(),
-                "region": str(r.get("منطقه نهائی") or r.get("منطقه فروش") or "").strip() or "نامشخص",
-            })
-    items.sort(key=lambda x: x["code"])
-
-    return templates.TemplateResponse("closed_stores.html", {
-        "request": request,
-        "active": "closed_stores",
-        "items": items,
-        "count": len(items),
-    })
-
-
 @app.get("/data", response_class=HTMLResponse)
 def data_browser_page(request: Request):
     if not _is_authed(request):
@@ -2520,7 +2620,6 @@ def api_monitor(request: Request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     mon = _build_monitor()
-    now = datetime.now()
     users = [{
         "user_id": u["user_id"],
         "name": u["name"],
@@ -2775,8 +2874,7 @@ def _apply_expert_change(action, *args) -> dict:
         result = action(*args)
     except Exception as exc:  # noqa: BLE001
         if backup:
-            shutil.copy2(config.INFO_BACKUP_DIR / f"{backup}.xlsx", config.INFO_EXCEL_PATH)
-            info_store.reload_info()
+            _restore_info_backup(backup)
         return {"ok": False, "message": f"خطا: {exc}"}
     result["ok"] = True
     result["backup"] = backup
@@ -2937,8 +3035,7 @@ async def bulk_expert(request: dict):
     except Exception as exc:  # noqa: BLE001
         # اگه نوشتن شکست خورد، نسخه‌ی قبلی برگردونه
         if backup:
-            shutil.copy2(config.INFO_BACKUP_DIR / f"{backup}.xlsx", config.INFO_EXCEL_PATH)
-            info_store.reload_info()
+            _restore_info_backup(backup)
         return JSONResponse({"ok": False, "message": f"خطا: {exc}"}, status_code=400)
 
     result["ok"] = True

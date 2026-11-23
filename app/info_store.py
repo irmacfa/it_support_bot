@@ -195,9 +195,21 @@ class InfoProfile(_Profile):
 
     def source_files(self) -> list[Path]:
         """فایل‌هایی که اطلاعات فروشگاه‌ها ازشون خونده می‌شه."""
-        if config.INFO_EXCEL_PATH.exists() and config.INFO_EXCEL_PATH.suffix.lower() in SUPPORTED_SUFFIXES:
-            return [config.INFO_EXCEL_PATH]
-        return []
+        # آپلودِ CSV/TXT مجاز است و فایل فعال با پسوند واقعی ذخیره می‌شود؛
+        # بنابراین نباید فقط info_stores.xlsx را در نظر گرفت.
+        candidates = [config.INFO_EXCEL_PATH]
+        candidates += [config.INFO_EXCEL_PATH.with_suffix(suffix)
+                       for suffix in (".xlsx", ".xlsm", ".csv", ".txt")]
+        seen: set[str] = set()
+        files: list[Path] = []
+        for path in candidates:
+            key = str(path).casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
+                files.append(path)
+        return files
 
     def index_sheet(self, file_name, sheet_name, raw_df, new_index, seen):
         return _info_index_sheet(file_name, sheet_name, raw_df, new_index, seen)
@@ -209,6 +221,17 @@ _lock = ENGINE._lock
 
 def source_files() -> list[Path]:
     return InfoProfile().source_files()
+
+
+def active_info_path() -> Path:
+    """مسیر فایل اطلاعاتِ فعال (با هر پسوندی؛ اولویت با xlsx/xlsm)."""
+    files = source_files()
+    if not files:
+        return config.INFO_EXCEL_PATH
+    for path in files:
+        if path.suffix.lower() in {".xlsx", ".xlsm"}:
+            return path
+    return files[0]
 
 
 def build_from_paths(paths: list[Path]) -> tuple[dict[str, list[dict]], dict]:
@@ -295,7 +318,7 @@ def get_status() -> dict:
         "total_records": status["total_records"],
         "sheets": status["sheets"],
         "skipped_sheets": status["skipped_sheets"],
-        "info_excel_exists": config.INFO_EXCEL_PATH.exists(),
+        "info_excel_exists": bool(source_files()),
         "files": [p.name for p in source_files()],
         "last_error": status["last_error"],
         "generated_at": status["generated_at"],
@@ -406,19 +429,16 @@ def get_directory_rows() -> tuple[list[dict], list[dict]]:
 def expert_assignments() -> tuple[list[str], dict[str, str]]:
     """(سطرهای خام شیت کارشناس، نگاشت کد → کارشناس) برای ویرایش گروهی."""
     from app.xlsx_sheet import read_sheet
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     rows = read_sheet(path, EXPERT_SHEET) if path.exists() else []
     if not rows:
         return [], {}
     header = [str(c).strip() for c in rows[0]]
-    try:
-        code_pos = header.index(INFO_CODE_COL)
-    except ValueError:
-        code_pos = 0
-    try:
-        expert_pos = header.index(EXPERT_COLUMN)
-    except ValueError:
-        expert_pos = 1
+    missing = [c for c in (INFO_CODE_COL, EXPERT_COLUMN) if c not in header]
+    if missing:
+        raise ValueError(f"ستون {' / '.join(missing)} توی شیت «{EXPERT_SHEET}» پیدا نشد؛ فایلی تغییر نکرد.")
+    code_pos = header.index(INFO_CODE_COL)
+    expert_pos = header.index(EXPERT_COLUMN)
     mapping: dict[str, str] = {}
     for row in rows[1:]:
         padded = list(row) + [""] * (expert_pos + 1 - len(row))
@@ -504,7 +524,7 @@ def bulk_assign_expert(code_from: str, code_to: str, expert: str,
     if expert == EXPERT_UNSET:
         raise ValueError("برای خالی‌کردن از دکمه‌ی حذف تک‌تک استفاده کن")
 
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     if not path.exists():
         raise ValueError("فایل اطلاعات پیدا نشد")
 
@@ -512,14 +532,11 @@ def bulk_assign_expert(code_from: str, code_to: str, expert: str,
     if not rows:
         raise ValueError(f"شیت «{EXPERT_SHEET}» توی فایل نیست")
     header = [str(c).strip() for c in rows[0]]
-    try:
-        code_pos = header.index(INFO_CODE_COL)
-    except ValueError:
-        code_pos = 0
-    try:
-        expert_pos = header.index(EXPERT_COLUMN)
-    except ValueError:
-        expert_pos = 1
+    missing = [c for c in (INFO_CODE_COL, EXPERT_COLUMN) if c not in header]
+    if missing:
+        raise ValueError(f"ستون {' / '.join(missing)} توی شیت «{EXPERT_SHEET}» پیدا نشد؛ فایلی تغییر نکرد.")
+    code_pos = header.index(INFO_CODE_COL)
+    expert_pos = header.index(EXPERT_COLUMN)
     width = max(len(header), expert_pos + 1)
 
     lo, hi = _range_bounds(code_from, code_to)
@@ -595,14 +612,11 @@ def _expert_sheet_rows(path: Path) -> tuple[list[list[str]], int, int]:
     if not rows:
         raise ValueError(f"شیت «{EXPERT_SHEET}» توی فایل نیست")
     header = [str(c).strip() for c in rows[0]]
-    try:
-        code_pos = header.index(INFO_CODE_COL)
-    except ValueError:
-        code_pos = 0
-    try:
-        expert_pos = header.index(EXPERT_COLUMN)
-    except ValueError:
-        expert_pos = 1
+    missing = [c for c in (INFO_CODE_COL, EXPERT_COLUMN) if c not in header]
+    if missing:
+        raise ValueError(f"ستون {' / '.join(missing)} توی شیت «{EXPERT_SHEET}» پیدا نشد؛ فایلی تغییر نکرد.")
+    code_pos = header.index(INFO_CODE_COL)
+    expert_pos = header.index(EXPERT_COLUMN)
     return rows, code_pos, expert_pos
 
 
@@ -627,7 +641,7 @@ def closed_codes() -> frozenset[str]:
 
     from app.xlsx_sheet import read_sheet
     codes: set[str] = set()
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     if path.exists():
         try:
             rows = read_sheet(path, CLOSED_SHEET)
@@ -679,7 +693,7 @@ def clear_closed_experts() -> dict:
     """
     from app.xlsx_sheet import replace_sheet
 
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     rows, code_pos, expert_pos = _expert_sheet_rows(path)
     width = max(len(rows[0]), expert_pos + 1)
     closed = closed_codes()
@@ -744,7 +758,7 @@ def set_store_expert(code: str, expert: str) -> dict:
     if expert == EXPERT_UNSET:
         expert = ""
 
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     rows, code_pos, expert_pos = _expert_sheet_rows(path)
     width = max(len(rows[0]), expert_pos + 1)
 
@@ -798,7 +812,7 @@ def set_store_experts_bulk(pairs) -> dict:
     if not wanted:
         return {"changed": 0, "skipped": skipped, "saved": 0}
 
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     rows, code_pos, expert_pos = _expert_sheet_rows(path)
     width = max(len(rows[0]), expert_pos + 1)
 
@@ -842,7 +856,7 @@ def rename_expert(old: str, new: str) -> dict:
     if new == EXPERT_UNSET:
         raise ValueError("برای خالی‌کردن از «بی‌کارشناس» توی فهرست استفاده کن")
 
-    path = config.INFO_EXCEL_PATH
+    path = active_info_path()
     rows, _code_pos, expert_pos = _expert_sheet_rows(path)
     width = max(len(rows[0]), expert_pos + 1)
     changed = 0
@@ -876,6 +890,9 @@ def save_sheet_display(values: dict[str, dict]) -> None:
             saved[sheet] = entry
     cfg["info_sheets"] = saved
     atomic_write_json(FIELDS_CONFIG_PATH, cfg)
+
+
+MAX_INFO_REPLY_CHARS = 3500
 
 
 def format_info_reply(code: str, records: dict | list[dict] | None) -> str:
@@ -918,7 +935,13 @@ def format_info_reply(code: str, records: dict | list[dict] | None) -> str:
 
     if not blocks:
         return f"🏪 اطلاعات فروشگاه {code}\n\nهیچ فیلد قابل نمایشی برای این فروشگاه نیست."
-    return f"🏪 اطلاعات فروشگاه {code}\n\n" + "\n\n".join(blocks)
+    text = f"🏪 اطلاعات فروشگاه {code}\n\n" + "\n\n".join(blocks)
+    if len(text) > MAX_INFO_REPLY_CHARS:
+        clipped = text[:MAX_INFO_REPLY_CHARS]
+        if "\n" in clipped:
+            clipped = clipped.rsplit("\n", 1)[0]
+        text = clipped.rstrip() + "\n… (پیام طولانی شد؛ بقیه توی پنل › نمایش کامل دیتا)"
+    return text
 
 
 # ستون و برچسبِ «کارشناس انفورماتیک» در فهرست یکپارچه‌ی فروشگاه‌ها

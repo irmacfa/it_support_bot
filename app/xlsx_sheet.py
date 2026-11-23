@@ -6,7 +6,9 @@
 """
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape, unescape
@@ -15,6 +17,20 @@ import pandas as pd
 
 CT_SHEET = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
 REL_WORKSHEET = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+
+
+def _temp_path(dst: Path) -> Path:
+    """فایل موقت منحصربهفرد کنار مقصد (برای جلوگیری از race در ویرایش همزمان)."""
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{dst.stem}.", suffix=dst.suffix, dir=dst.parent)
+    os.close(fd)
+    return Path(name)
+
+
+def _attr_escape(value) -> str:
+    """escape برای داخل ویژگی XML؛ ``"`` هم باید escape بشه."""
+    return escape(str(value), {'"': "&quot;"})
 
 # اگه مقداری شبیه «۱۱۶۵.۰» بود (سلول اعشاری ذخیره شده) به «۱۱۶۵» تبدیل می‌شه
 _TRAILING_ZERO = re.compile(r"^(\d+)\.0$")
@@ -151,7 +167,7 @@ def replace_sheet(path: Path, sheet_name: str, rows: list[list[str]]) -> Path:
         raise ValueError(f"شیت «{sheet_name}» توی فایل پیدا نشد")
 
     body = _build_sheet_xml(rows)
-    tmp = path.with_name(path.stem + ".__tmp__" + path.suffix)
+    tmp = _temp_path(path)
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
         for n in names:
             zi = zipfile.ZipInfo(n, date_time=infos[n].date_time)
@@ -210,7 +226,7 @@ def new_workbook(dst: Path, sheets: list[tuple[str, list[list[str]]]]) -> Path:
 
     wb_sheets, rels = [], []
     for i, (name, _rows) in enumerate(wanted, start=1):
-        wb_sheets.append(f'<sheet name="{escape(name)}" sheetId="{i}" r:id="rId{i}"/>')
+        wb_sheets.append(f'<sheet name="{_attr_escape(name)}" sheetId="{i}" r:id="rId{i}"/>')
         rels.append(f'<Relationship Id="rId{i}" Type="{REL_WORKSHEET}" '
                     f'Target="worksheets/sheet{i}.xml"/>')
     styles_rid = len(wanted) + 1
@@ -236,7 +252,7 @@ def new_workbook(dst: Path, sheets: list[tuple[str, list[list[str]]]]) -> Path:
             [[("" if c is None else str(c)) for c in row] for row in rows])
 
     dst.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dst.with_name(dst.stem + ".__new__" + dst.suffix)
+    tmp = _temp_path(dst)
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
         for name, body in payload.items():
             out.writestr(name, body)
@@ -268,7 +284,7 @@ def add_sheet(src: Path, sheet_name: str, rows: list[list[str]], dst: Path | Non
     new_rid = max(rids) + 1 if rids else 1
 
     part = f"xl/worksheets/sheet{new_num}.xml"
-    tag = f'<sheet name="{escape(sheet_name)}" sheetId="{new_id}" r:id="rId{new_rid}"/>'
+    tag = f'<sheet name="{_attr_escape(sheet_name)}" sheetId="{new_id}" r:id="rId{new_rid}"/>'
     wb_new = wb_xml.replace("</sheets>", tag + "</sheets>")
     if wb_new == wb_xml:
         raise ValueError("درج شیت در workbook.xml ناموفق بود")
@@ -283,7 +299,7 @@ def add_sheet(src: Path, sheet_name: str, rows: list[list[str]], dst: Path | Non
     if ct_new == ct:
         raise ValueError("درج Content-Type ناموفق بود")
 
-    tmp = dst.with_name(dst.stem + ".__tmp__" + dst.suffix)
+    tmp = _temp_path(dst)
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
         for n in names:
             info = infos[n]

@@ -6,6 +6,7 @@ import json
 import threading
 from datetime import datetime
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 STORE_PATH = config.DATA_DIR / "charge_admins.json"
@@ -24,9 +25,7 @@ def _load() -> None:
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(_admins, f, ensure_ascii=False, indent=2)
+    atomic_write_json(STORE_PATH, _admins)
 
 
 def list_all() -> list[dict]:
@@ -49,6 +48,7 @@ def add(user_id, name: str = "") -> dict:
         "added_at": datetime.now().isoformat(timespec="seconds"),
     }
     with _lock:
+        _load()
         _admins[user_id] = record
         _save()
     return record
@@ -57,6 +57,7 @@ def add(user_id, name: str = "") -> dict:
 def remove(user_id) -> None:
     user_id = str(user_id).strip()
     with _lock:
+        _load()
         _admins.pop(user_id, None)
         _save()
 

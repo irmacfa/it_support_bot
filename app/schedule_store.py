@@ -109,6 +109,7 @@ def update_day(
     evening_shift: str | None = None,
 ) -> dict | None:
     """یه روز خاص از برنامه شیفت رو مستقیم ویرایش می‌کنه (مثلاً جابجایی دو نفر)، بدون نیاز به آپلود دوباره PDF."""
+    global _schedule
     with _lock:
         _load()
         current = _schedule.get(date_str)

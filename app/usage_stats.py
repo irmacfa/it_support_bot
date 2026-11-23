@@ -5,11 +5,13 @@
 می‌داریم تا بشه گزارش رو برای یه بازه‌ی دلخواه (مثلاً یه هفته) هم گرفت.
 توی یه فایل JSON دائمی ذخیره می‌شه.
 """
+import copy
 import json
 import threading
 from datetime import datetime
 import jdatetime
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 STORE_PATH = config.DATA_DIR / "usage_stats.json"
@@ -34,9 +36,9 @@ def _load() -> None:
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(_stats, f, ensure_ascii=False, indent=2)
+    # ربات و پنل دو پردازش جداگانه‌اند؛ نوشتن معمولی JSON ممکن است خواننده را
+    # با فایل نیمهنوشته مواجه کرده و آمار را خالی نشان دهد.
+    atomic_write_json(STORE_PATH, _stats)
 
 
 def record_action(user_id, action: str) -> None:
@@ -133,19 +135,19 @@ def record_reset_response(admin_id, action: str, elapsed_seconds: float) -> None
 def all_user_stats() -> dict:
     with _lock:
         _load()
-        return dict(_stats["users"])
+        return copy.deepcopy(_stats["users"])
 
 
 def all_charge_admin_stats() -> dict:
     with _lock:
         _load()
-        return dict(_stats["charge_admins"])
+        return copy.deepcopy(_stats["charge_admins"])
 
 
 def all_reset_admin_stats() -> dict:
     with _lock:
         _load()
-        return dict(_stats["reset_admins"])
+        return copy.deepcopy(_stats["reset_admins"])
 
 
 def range_user_stats(from_date: str, to_date: str) -> dict[str, dict]:
@@ -170,7 +172,7 @@ def range_user_stats(from_date: str, to_date: str) -> dict[str, dict]:
 def all_code_stats() -> dict:
     with _lock:
         _load()
-        return dict(_stats["codes"])
+        return copy.deepcopy(_stats["codes"])
 
 
 def range_code_stats(from_date: str, to_date: str) -> dict[str, dict]:

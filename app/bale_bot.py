@@ -24,6 +24,7 @@ import jdatetime
 import requests
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, schedule_store, schedule_times, usage_stats, presence, region_experts
+from app.atomic_io import atomic_write_json
 
 logging.basicConfig(
     level=logging.INFO,
@@ -139,11 +140,8 @@ GROUP_PROMPT_TEXT = "🔍 کد فروشگاه رو تایپ کن تا شماره
 GROUP_INVALID_TEXT = "❗ فقط عدد و حداکثر ۴ رقم مجازه. دوباره امتحان کن."
 GROUP_PENDING_TIMEOUT_SECONDS = 180
 
-# --- اطلاعات فروشگاه (گروه) ---
-INFO_TRIGGER_WORD = "اطلاعات"
-INFO_PROMPT_TEXT = "📋 کد فروشگاه رو تایپ کن تا اطلاعاتش رو بهت بدم (حداکثر ۴ رقم)."
-INFO_INVALID_TEXT = "❗ فقط عدد و حداکثر ۴ رقم مجازه. دوباره امتحان کن."
-INFO_PENDING_TIMEOUT_SECONDS = 180
+# تنظیمات اطلاعات فروشگاه پایینِ فایل تعریف شدهاند؛ تعریف دوباره‌ی اینجا
+# هرگز اجرا نمیشد و فقط موجب سردرگمی بود.
 
 CODE_PATTERN = re.compile(r"^[0-9]{1,4}$")
 GROUP_CHAT_TYPES = {"group", "supergroup"}
@@ -172,6 +170,10 @@ _pending_info: dict[tuple, dict] = {}
 
 CHARGE_BUTTON_NOISSUE = "🔋 شارژ داره"
 CHARGE_BUTTON_DONE = "✅ شارژ انجام شد"
+# دکمه لغو فقط توی پیام یادآوریِ گروه نمایش داده میشه و تنها خود درخواست کننده مجاز به زدنشه.
+CANCEL_REQUEST_BUTTON = "❌ لغو درخواست"
+# بعد از لغو، پیام‌های باقیمانده (تأیید لغو، کارت درخواست و اعلان مسئولین) پاک میشوند.
+CANCEL_CLEANUP_DELAY_SECONDS = 10
 
 # درخواست‌های شارژ درحال‌انتظار برای تایید ادمین، کلید: request_id
 # مقدار: {"group_chat_id", "answer_message_id", "code", "requester_name", "resolved",
@@ -233,8 +235,8 @@ RESET_BUTTON_WRONG = "❌ مشخصات اشتباه است"
 RESET_BUTTON_RETRY = "🔄 ارسال مجدد"
 RESET_KIND_LABELS = {"store": "فروشگاه", "hq": "ستادی"}
 # رمز پیش‌فرضی که در پیام تأیید ریست نمایش داده می‌شود (در صورت نیاز قابل تغییر):
-RESET_DEFAULT_PASSWORD_STORE = "12345678"   # فروشگاه
-RESET_DEFAULT_PASSWORD_HQ = "123456789"     # ستادی
+RESET_DEFAULT_PASSWORD_STORE = config.RESET_DEFAULT_PASSWORD_STORE  # فروشگاه
+RESET_DEFAULT_PASSWORD_HQ = config.RESET_DEFAULT_PASSWORD_HQ        # ستادی
 
 # وضعیت «درخواست ریست رمز» برای هر (chat_id, user_id) توی گروه.
 # کلید: (chat_id, user_id) — مقدار: {"trigger_id", "prompt_id", "extra_ids": [...],
@@ -322,9 +324,7 @@ def _load_sent_schedule_slots() -> None:
 
 
 def _save_sent_schedule_slots() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(SCHEDULE_STATE_PATH, "w", encoding="utf-8") as f:
-        json.dump(sorted(_sent_schedule_slots), f, ensure_ascii=False, indent=2)
+    atomic_write_json(SCHEDULE_STATE_PATH, sorted(_sent_schedule_slots))
 
 
 _load_sent_schedule_slots()
@@ -570,7 +570,10 @@ def format_reply(code: str, results: list[dict] | None) -> str:
         text += f"\n… {len(all_results) - len(results)} مورد دیگه هست (توی پنل › نمایش کامل دیتا)"
 
     if len(text) > MAX_REPLY_CHARS:
-        text = text[:MAX_REPLY_CHARS].rsplit("\n", 1)[0] + "\n… (پیام طولانی شد؛ بقیه توی پنل › نمایش کامل دیتا)"
+        clipped = text[:MAX_REPLY_CHARS]
+        if "\n" in clipped:
+            clipped = clipped.rsplit("\n", 1)[0]
+        text = clipped.rstrip() + "\n… (پیام طولانی شد؛ بقیه توی پنل › نمایش کامل دیتا)"
     return text
 
 
@@ -684,7 +687,9 @@ def handle_group_message(message: dict) -> None:
                     )
                 else:
                     reply_text = f"❌ کد «{normalized_code}» توی فایل اطلاعات فروشگاه‌ها پیدا نشد."
-                send_message(chat_id, reply_text)
+                if send_message(chat_id, reply_text) is None:
+                    log.warning("ارسال جواب اطلاعات کد «%s» ناموفق بود؛ پیام‌ها پاک نمی‌شوند.", normalized_code)
+                    return
                 usage_stats.record_action(user_id, "info")
                 usage_stats.record_code_lookup(normalized_code, "info")
 
@@ -730,12 +735,21 @@ def handle_group_message(message: dict) -> None:
                     normalized_code, charge_entry["display_name"], chat_id, len(results) if results else 0,
                 )
                 reply_text = format_group_reply(charge_entry["display_name"], normalized_code, results)
-                answer_message_id = send_message(chat_id, reply_text)
+                # دکمه لغو از همان لحظه روی پیام نتیجه در گروه باشد، نه فقط روی
+                # یادآوری ۳۰ دقیقه‌ای؛ شناسه درخواست را قبل از ارسال میسازیم تا
+                # callback_data داخل دکمه با درخواست ثبتشده یکسان باشد.
+                request_id = secrets.token_hex(4) if results and charge_admins.get_ids() else None
+                reply_markup = (
+                    _requester_cancel_keyboard("charge", request_id, {"requester_user_id": user_id})
+                    if request_id else None
+                )
+                answer_message_id = send_message(chat_id, reply_text, reply_markup=reply_markup)
                 usage_stats.record_action(user_id, "charge")
                 usage_stats.record_code_lookup(normalized_code, "charge")
 
                 if results:
-                    _notify_charge_admins(chat_id, answer_message_id, normalized_code, charge_entry["display_name"], results)
+                    _notify_charge_admins(chat_id, answer_message_id, normalized_code,
+                                          charge_entry["display_name"], results, user_id, request_id)
 
                 delete_message(chat_id, charge_entry["trigger_id"])
                 delete_message(chat_id, charge_entry["prompt_id"])
@@ -827,7 +841,9 @@ def handle_group_message(message: dict) -> None:
                 kind, target = "hq", text.strip()
 
             # درخواست قبلی برای همین فروشگاه/کاربر هنوز رسیدگی نشده — درخواست جدید ثبت نشه
-            if _find_unresolved_reset_request(chat_id, kind, target) is not None:
+            previous = _find_unresolved_reset_request(chat_id, kind, target)
+            if previous is not None:
+                previous_id, previous_record = previous
                 log.info(
                     "درخواست تکراری ریست رمز %s «%s» از %s در چت %s رد شد (درخواست قبلی هنوز باز است)",
                     kind, target, reset_entry["display_name"], chat_id,
@@ -836,7 +852,13 @@ def handle_group_message(message: dict) -> None:
                     f"⏳ {reset_entry['display_name']} عزیز، درخواست قبلی ریست رمز "
                     f"{RESET_KIND_LABELS[kind]} {target} هنوز رسیدگی نشده."
                 )
-                send_message(chat_id, dup_text, reply_to_message_id=message_id)
+                # اگه خود درخواست کنندهٔ قبلی دوباره اقدام کرده، دکمه لغو هم بده تا
+                # بدون منتظر ماندن یادآوری، بتونه درخواستش رو پس بگیره.
+                dup_keyboard = None
+                if str(previous_record.get("requester_user_id")) == str(user_id):
+                    dup_keyboard = _requester_cancel_keyboard("reset", previous_id, previous_record)
+                    dup_text += "\nاگه منصرف شدی، دکمهٔ «لغو درخواست» رو بزن."
+                send_message(chat_id, dup_text, reply_to_message_id=message_id, reply_markup=dup_keyboard)
                 delete_message(chat_id, reset_entry["trigger_id"])
                 delete_message(chat_id, reset_entry["prompt_id"])
                 for extra_id in reset_entry["extra_ids"]:
@@ -847,11 +869,18 @@ def handle_group_message(message: dict) -> None:
 
             log.info("ریست رمز %s «%s» از %s در چت %s", kind, target, reset_entry["display_name"], chat_id)
             answer_text = _reset_request_card(reset_entry["display_name"], kind, target)
-            answer_message_id = send_message(chat_id, answer_text)
+            # مثل شارژ: دکمه لغو بلافاصله روی کارت درخواست در گروه باشد.
+            request_id = secrets.token_hex(4) if reset_admins.get_ids() else None
+            reply_markup = (
+                _requester_cancel_keyboard("reset", request_id, {"requester_user_id": user_id})
+                if request_id else None
+            )
+            answer_message_id = send_message(chat_id, answer_text, reply_markup=reply_markup)
             usage_stats.record_action(user_id, "reset")
             if kind == "store":
                 usage_stats.record_code_lookup(normalized_code, "reset")
-            _notify_reset_admins(chat_id, answer_message_id, kind, target, reset_entry["display_name"], user_id)
+            _notify_reset_admins(chat_id, answer_message_id, kind, target,
+                                 reset_entry["display_name"], user_id, request_id)
 
             delete_message(chat_id, reset_entry["trigger_id"])
             delete_message(chat_id, reset_entry["prompt_id"])
@@ -986,18 +1015,36 @@ def handle_group_message(message: dict) -> None:
             send_message(chat_id, chunk)
 
 
-def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: str, requester_name: str, results: list[dict] | None) -> None:
+def _requester_cancel_keyboard(kind: str, request_id: str, record: dict) -> dict | None:
+    """دکمه لغو رو فقط وقتی میسازیم که شناسه درخواست کننده رو ذخیره کرده باشیم.
+
+    درخواست‌های قدیمی که قبل از اضافه شدن این قابلیت ثبت شدن، شناسه کاربر رو
+    ندارن؛ براشون دکمه‌ای ساخته نمی‌شه تا کسی نتونه بدون احراز هویت لغو‌شون کنه.
+    """
+    if record.get("requester_user_id") is None:
+        return None
+    return {
+        "inline_keyboard": [[
+            {"text": CANCEL_REQUEST_BUTTON, "callback_data": f"{kind}:cancel:{request_id}"},
+        ]]
+    }
+
+
+def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: str, requester_name: str,
+                          results: list[dict] | None, requester_user_id=None,
+                          request_id: str | None = None) -> None:
     admin_ids = charge_admins.get_ids()
     if not admin_ids:
         log.warning("هیچ مسئول شارژی توی پنل ثبت نشده؛ درخواست شارژ برای کسی ارسال نشد.")
         return
 
-    request_id = secrets.token_hex(4)
+    request_id = request_id or secrets.token_hex(4)
     _charge_requests[request_id] = {
         "group_chat_id": group_chat_id,
         "answer_message_id": answer_message_id,
         "code": code,
         "requester_name": requester_name,
+        "requester_user_id": requester_user_id,
         "resolved": False,
         "admin_message_ids": {},
         "group_reminder_ids": [],
@@ -1051,8 +1098,10 @@ def _remind_pending_charge_request(request_id: str, record: dict) -> None:
 
     gr_msg_id = send_message(
         record["group_chat_id"],
-        "⏰ هنوز مسئول شارژ به این درخواست رسیدگی نکرده.",
+        f"⏰ هنوز مسئول شارژ به درخواست شارژ فروشگاه {record['code']} "
+        f"(از طرف {record['requester_name']}) رسیدگی نکرده.",
         reply_to_message_id=record["answer_message_id"],
+        reply_markup=_requester_cancel_keyboard("charge", request_id, record),
     )
     if gr_msg_id is not None:
         record["group_reminder_ids"].append(gr_msg_id)
@@ -1078,15 +1127,16 @@ def _maybe_remind_pending_charge_requests() -> None:
 def _find_unresolved_reset_request(group_chat_id, kind: str, target: str):
     """درخواست ریست رمزِ قبلی برای همین هدف (همون فروشگاه یا کاربر) که هنوز
     رسیدگی نشده رو پیدا می‌کنه تا درخواست تکراری ثبت نشه."""
+    # برگشتی: (request_id, record) یا None — شناسه برای دکمه لغو لازم است.
     needle = target.casefold() if kind == "hq" else target
-    for record in _reset_requests.values():
+    for request_id, record in _reset_requests.items():
         if record["resolved"] or record["kind"] != kind:
             continue
         if record["group_chat_id"] != group_chat_id:
             continue
         current = record["target"]
         if (current.casefold() if kind == "hq" else current) == needle:
-            return record
+            return request_id, record
     return None
 
 
@@ -1119,7 +1169,7 @@ def _reset_done_group_text(kind: str, target: str, admin_name: str, requester_na
 
 def _reset_done_reply_text(kind: str, target: str, admin_name: str, requester_name: str = "") -> str:
     """پیام تأیید ریست همراه با رمز پیش‌فرض (ستادی: ۹ رقم، فروشگاه: ۸ رقم) —
-    این پیام فقط پیوی خود درخواست‌کننده فرستاده می‌شه."""
+    این پیام فقط پیوی خود درخواست کننده فرستاده می‌شه."""
     password = RESET_DEFAULT_PASSWORD_STORE if kind == "store" else RESET_DEFAULT_PASSWORD_HQ
     requester = f"به درخواست {requester_name}، " if requester_name else ""
     return (
@@ -1140,14 +1190,15 @@ def _reset_wrong_reply_text(kind: str, target: str, admin_name: str) -> str:
     )
 
 
-def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str, target: str, requester_name: str, requester_user_id=None) -> None:
+def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str, target: str, requester_name: str,
+                         requester_user_id=None, request_id: str | None = None) -> None:
     """درخواست ریست رمز رو پیوی برای مسئولین ریست (زرابی، بصیر و…) می‌فرسته."""
     admin_ids = reset_admins.get_ids()
     if not admin_ids:
         log.warning("هیچ مسئول ریست رمزی توی پنل ثبت نشده؛ درخواست ریست رمز برای کسی ارسال نشد.")
         return
 
-    request_id = secrets.token_hex(4)
+    request_id = request_id or secrets.token_hex(4)
     _reset_requests[request_id] = {
         "group_chat_id": group_chat_id,
         "answer_message_id": answer_message_id,
@@ -1198,8 +1249,10 @@ def _remind_pending_reset_request(request_id: str, record: dict) -> None:
 
     gr_msg_id = send_message(
         record["group_chat_id"],
-        "⏰ هنوز مسئول ریست رمز به این درخواست رسیدگی نکرده.",
+        f"⏰ هنوز مسئول ریست رمز به درخواست ریست رمز {label} {record['target']} "
+        f"(از طرف {record['requester_name']}) رسیدگی نکرده.",
         reply_to_message_id=record["answer_message_id"],
+        reply_markup=_requester_cancel_keyboard("reset", request_id, record),
     )
     if gr_msg_id is not None:
         record["group_reminder_ids"].append(gr_msg_id)
@@ -1220,6 +1273,49 @@ def _maybe_remind_pending_reset_requests() -> None:
             _remind_pending_reset_request(request_id, record)
         except Exception as e:
             log.exception("خطا در ارسال یادآوری درخواست ریست رمز %s: %s", request_id, e)
+
+
+def _cancel_request_by_requester(kind: str, request_id: str, record: dict) -> None:
+    """درخواست باز رو به خواستِ خودِ درخواست کننده لغو میکند و پیام‌های آن را تمیز میکند."""
+    record["resolved"] = True
+    record["resolved_at"] = time.time()
+    record["resolved_action"] = "cancelled"
+
+    if kind == "charge":
+        target_text = f"شارژ فروشگاه {record['code']}"
+        save = _save_charge_requests
+    else:
+        label = RESET_KIND_LABELS.get(record["kind"], record["kind"])
+        target_text = f"ریست رمز {label} {record['target']}"
+        save = _save_reset_requests
+
+    name = record.get("requester_name") or ""
+    requester = f" (از طرف {name})" if name else ""
+    group_text = f"❌ درخواست {target_text}{requester} توسط درخواست کننده لغو شد."
+    group_id = record["group_chat_id"]
+    cancel_msg_id = send_message(group_id, group_text, reply_to_message_id=record["answer_message_id"])
+    if cancel_msg_id is not None:
+        _auto_delete_message(group_id, cancel_msg_id, CANCEL_CLEANUP_DELAY_SECONDS)
+    # کارت اصلی درخواست هم بعد از چند ثانیه پاک می‌شود تا گروه کاملاً تمیز بماند.
+    if record.get("answer_message_id") is not None:
+        _auto_delete_message(group_id, record["answer_message_id"], CANCEL_CLEANUP_DELAY_SECONDS)
+
+    # پیام‌های یادآوری فوراً پاک میشوند تا کسی نتواند دوباره دکمه لغو را بزند؛
+    # بقیه پیام‌ها (کارت و اعلان مسئولین) بعد از چند ثانیه حذف میشوند.
+    admin_text = f"ℹ️ درخواست {target_text}{requester} توسط درخواست کننده لغو شد.\nدیگ نیازی به رسیدگی نیست."
+    for admin_id, msg_ids in record.get("admin_message_ids", {}).items():
+        for msg_id in msg_ids[1:]:
+            delete_message(admin_id, msg_id)
+        if msg_ids:
+            clear_message_buttons(admin_id, msg_ids[0])
+            _auto_delete_message(admin_id, msg_ids[0], CANCEL_CLEANUP_DELAY_SECONDS)
+        notify_id = send_message(admin_id, admin_text)
+        if notify_id is not None:
+            _auto_delete_message(admin_id, notify_id, CANCEL_CLEANUP_DELAY_SECONDS)
+    for gr_id in record.get("group_reminder_ids", []):
+        delete_message(group_id, gr_id)
+    save()
+    log.info("درخواست %s %s (%s) توسط درخواست کننده لغو شد.", kind, request_id, target_text)
 
 
 def handle_callback_query(callback_query: dict) -> None:
@@ -1379,6 +1475,26 @@ def handle_callback_query(callback_query: dict) -> None:
         entry["extra_ids"] = []
         return
 
+    # --- callback لغو درخواست توسط خود درخواست کننده (دکمه‌ی پیام یادآوری در گروه) ---
+    # فقط کسی که درخواست رو ثبت کرده و تنها توی همان گروه می‌تونه لغوش کنه؛
+    # مسئولین با دکمه‌های «انجام شد/اشتباه» خودشون کنترل میشن و اینجا اجازه‌ای ندارن.
+    if data.startswith("charge:cancel:") or data.startswith("reset:cancel:"):
+        kind, _action, request_id = data.split(":", 2)
+        pool = _charge_requests if kind == "charge" else _reset_requests
+        record = pool.get(request_id)
+        requester_id = record.get("requester_user_id") if record else None
+        if (not record or requester_id is None
+                or str(chat_id) != str(record.get("group_chat_id"))
+                or clicking_admin_id != str(requester_id)):
+            answer_callback_query(cq_id, "فقط درخواست کننده می‌تونه این درخواست رو لغو کنه.")
+            return
+        if record["resolved"]:
+            answer_callback_query(cq_id, "این درخواست قبلاً پاسخ داده یا لغو شده.")
+            return
+        _cancel_request_by_requester(kind, request_id, record)
+        answer_callback_query(cq_id, "درخواست لغو شد ❌")
+        return
+
     # --- callback تایید انجام / اشتباه بودن درخواست ریست رمز ---
     if data.startswith("reset:done:") or data.startswith("reset:wrong:"):
         _, action, request_id = data.split(":", 2)
@@ -1400,6 +1516,8 @@ def handle_callback_query(callback_query: dict) -> None:
         record["resolved"] = True
         record["resolved_at"] = time.time()
         record["resolved_action"] = action
+        # دکمه لغو روی کارت گروه نباید بعد از پاسخ مسئول قابل کلیک بماند.
+        clear_message_buttons(record["group_chat_id"], record.get("answer_message_id"))
         admin_name = _display_name(clicking_admin)
         label = RESET_KIND_LABELS.get(record["kind"], record["kind"])
         elapsed_seconds = time.time() - record.get("created_at", time.time())
@@ -1415,7 +1533,7 @@ def handle_callback_query(callback_query: dict) -> None:
             parse_mode = None
             answer_callback_query(cq_id, "ثبت شد ✅")
             # در گروه فقط «به درخواست چه‌کسی و توسط چه‌کسی» گفته میشه (بدون رمز)؛
-            # این پیام آخر می‌مونه و پاک نمیشه، ولی کارت درخواست و یادآوری‌ها فوراً پاک میشن.
+            # این پیام آخر می‌مونه و پاک نمی‌شه، ولی کارت درخواست و یادآوری‌ها فوراً پاک میشن.
             group_text = _reset_done_group_text(record["kind"], record["target"], admin_name, requester_name)
             send_message(record["group_chat_id"], group_text)
             delete_message(record["group_chat_id"], record["answer_message_id"])
@@ -1466,6 +1584,8 @@ def handle_callback_query(callback_query: dict) -> None:
     record["resolved"] = True
     record["resolved_at"] = time.time()
     record["resolved_action"] = action
+    # دکمه لغو روی کارت گروه نباید بعد از پاسخ مسئول قابل کلیک بماند.
+    clear_message_buttons(record["group_chat_id"], record.get("answer_message_id"))
     admin_name = _display_name(clicking_admin)
     answer_callback_query(cq_id, "ثبت شد ✅")
 
@@ -1716,9 +1836,8 @@ def _maybe_send_schedule_announcement() -> None:
     if slot_key in _sent_schedule_slots:
         return
 
-    _sent_schedule_slots.add(slot_key)
-    _save_sent_schedule_slots()
-
+    # فقط بعد از ارسال موفق علامت میخوریم؛ در غیر اینصورت اگر گروه هنوز شناسایی
+    # نشده یا فایل شیفت آپلود نشده باشد، اطلاعیه آن ساعت برای همیشه رد میشد.
     target_chat_id = _get_schedule_target_chat_id()
     if target_chat_id is None:
         log.warning("هیچ گروهی برای ارسال اطلاعیه شیفت شناسایی نشده.")
@@ -1740,8 +1859,12 @@ def _maybe_send_schedule_announcement() -> None:
             )
         return
 
-    send_message(target_chat_id, format_schedule_announcement(record))
-    log.info("اطلاعیه شیفت فردا (%s) به گروه %s ارسال شد.", date_str, target_chat_id)
+    if send_message(target_chat_id, format_schedule_announcement(record)) is not None:
+        _sent_schedule_slots.add(slot_key)
+        _save_sent_schedule_slots()
+        log.info("اطلاعیه شیفت فردا (%s) به گروه %s ارسال شد.", date_str, target_chat_id)
+    else:
+        log.warning("ارسال اطلاعیه شیفت فردا (%s) ناموفق بود؛ دوباره تلاش می‌شود.", date_str)
 
 
 def _notify_admin_new_registration(record: dict) -> None:

@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import csv
 import re
 from pathlib import Path
 
@@ -297,19 +298,17 @@ def split_file(path: Path, out_dir: Path) -> dict:
 
 
 def _write_single_csv(path: Path, sheets: list[str], out_dir: Path, kind: str) -> Path:
-    """شیت‌های یک دسته را در یک CSV (با جداکننده‌ی « » و انکد utf-8) می‌نویسد."""
+    """شیت‌های یک دسته را در یک CSV (استاندارد (utf-8 با BOM)) می‌نویسد."""
     target = out_dir / f"{path.stem}__{kind}.csv"
-    rows: list[str] = []
-    for name in sheets:
-        try:
-            sheet_rows = xlsx_sheet.read_sheet(path, name)
-        except Exception:  # noqa: BLE001
-            continue
-        if not rows:
-            rows.append(f"# {name}")
-        for row in sheet_rows:
-            rows.append(" ".join(_clean_header(c, i) if c else "" for i, c in enumerate(row)))
-    target.write_text("\n".join(rows), encoding="utf-8")
+    with target.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.writer(stream)
+        for name in sheets:
+            try:
+                sheet_rows = xlsx_sheet.read_sheet(path, name)
+            except Exception:  # noqa: BLE001
+                continue
+            for row in sheet_rows:
+                writer.writerow([_clean_header(c, i) if c else "" for i, c in enumerate(row)])
     return target
 
 

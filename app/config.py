@@ -22,6 +22,11 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
 # --- آیدی چت خصوصی مدیر (برای اطلاع‌رسانی ثبت‌نام کاربرهای جدید) ---
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 
+# --- رمزهای پیش‌فرضی که بعد از ریست رمز به درخواست کننده اعلام میشوند ---
+# مقادیر پیش‌فرض فقط برای سازگاری با استقرارهای قدیمیاند؛ در .env حتماً عوضشان کنید.
+RESET_DEFAULT_PASSWORD_STORE = os.getenv("RESET_DEFAULT_PASSWORD_STORE", "12345678")
+RESET_DEFAULT_PASSWORD_HQ = os.getenv("RESET_DEFAULT_PASSWORD_HQ", "123456789")
+
 
 # --- مسیر فایل اکسل ---
 DATA_DIR = BASE_DIR / "data"

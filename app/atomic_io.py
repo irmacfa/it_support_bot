@@ -16,7 +16,13 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     temp_path = Path(temp_name)
     try:
-        with os.fdopen(fd, "w", encoding=encoding, newline="") as stream:
+        stream = os.fdopen(fd, "w", encoding=encoding, newline="")
+    except Exception:
+        os.close(fd)
+        temp_path.unlink(missing_ok=True)
+        raise
+    try:
+        with stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())

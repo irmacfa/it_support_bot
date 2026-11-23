@@ -16,6 +16,7 @@ import re
 import threading
 
 from app import config
+from app.atomic_io import atomic_write_json
 
 _lock = threading.Lock()
 STORE_PATH = config.DATA_DIR / "separated_experts.json"
@@ -78,17 +79,17 @@ def _load() -> None:
                 _records = json.load(f)
         except Exception:
             _records = []
-    if not isinstance(_records, list):
-        _records = []
-    if not _records:
+    else:
+        # فقط اولین باری که فایل اصلاً وجود نداره Seed میشه؛ لیست خالیِ
+        # ذخیره‌شده بعد از حذف تمام منفک‌ها نباید دوباره پر بشه.
         _records = _seed()
         _save()
+    if not isinstance(_records, list):
+        _records = []
 
 
 def _save() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(_records, f, ensure_ascii=False, indent=2)
+    atomic_write_json(STORE_PATH, _records)
 
 
 def list_all() -> list[dict]:

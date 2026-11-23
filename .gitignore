@@ -6,3 +6,7 @@ __pycache__/
 data/
 .claude/
 .mimocode/
+.pytest_cache/
+cookies.txt
+requirements.txt.bak
+backups/

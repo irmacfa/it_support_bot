@@ -1036,14 +1036,15 @@ def _requester_cancel_keyboard(kind: str, request_id: str, record: dict) -> dict
     }
 
 
-def _group_reminder_keyboard(kind: str, request_id: str, record: dict) -> dict | None:
+def _group_reminder_keyboard(kind: str, request_id: str, record: dict, include_urgent: bool = False) -> dict | None:
     """دکمه‌های پیام یادآوری در گروه: لغو توسط درخواست کننده + یادآوری فوری مسئولین."""
     buttons = []
     cancel_kb = _requester_cancel_keyboard(kind, request_id, record)
     if cancel_kb:
         buttons.extend(cancel_kb["inline_keyboard"][0])
-    buttons.append({"text": URGENT_REMINDER_BUTTON, "callback_data": f"{kind}:urgent:{request_id}"})
-    return {"inline_keyboard": [buttons]}
+    if include_urgent:
+        buttons.append({"text": URGENT_REMINDER_BUTTON, "callback_data": f"{kind}:urgent:{request_id}"})
+    return {"inline_keyboard": [buttons]} if buttons else None
 
 
 def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: str, requester_name: str,
@@ -1113,12 +1114,13 @@ def _remind_pending_charge_request(request_id: str, record: dict) -> None:
         if msg_id is not None:
             record["admin_message_ids"].setdefault(str(admin_id), []).append(msg_id)
 
+    reminder_count = len(record.get("group_reminder_ids", [])) + 1
     gr_msg_id = send_message(
         record["group_chat_id"],
         f"⏰ هنوز مسئول شارژ به درخواست شارژ فروشگاه {record['code']} "
         f"(از طرف {record['requester_name']}) رسیدگی نکرده.",
         reply_to_message_id=record["answer_message_id"],
-        reply_markup=_group_reminder_keyboard("charge", request_id, record),
+        reply_markup=_group_reminder_keyboard("charge", request_id, record, include_urgent=reminder_count >= 2),
     )
     if gr_msg_id is not None:
         record["group_reminder_ids"].append(gr_msg_id)
@@ -1265,12 +1267,13 @@ def _remind_pending_reset_request(request_id: str, record: dict) -> None:
         if msg_id is not None:
             record["admin_message_ids"].setdefault(str(admin_id), []).append(msg_id)
 
+    reminder_count = len(record.get("group_reminder_ids", [])) + 1
     gr_msg_id = send_message(
         record["group_chat_id"],
         f"⏰ هنوز مسئول ریست رمز به درخواست ریست رمز {label} {record['target']} "
         f"(از طرف {record['requester_name']}) رسیدگی نکرده.",
         reply_to_message_id=record["answer_message_id"],
-        reply_markup=_group_reminder_keyboard("reset", request_id, record),
+        reply_markup=_group_reminder_keyboard("reset", request_id, record, include_urgent=reminder_count >= 2),
     )
     if gr_msg_id is not None:
         record["group_reminder_ids"].append(gr_msg_id)

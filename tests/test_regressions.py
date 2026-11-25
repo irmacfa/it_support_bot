@@ -294,12 +294,13 @@ class RequestCancellationTests(unittest.TestCase):
             else:
                 bale_bot._pending_reset[pending_key] = old_pending
 
-    def test_group_reminder_keyboard_has_cancel_and_urgent(self):
+    def test_group_reminder_keyboard_urgent_only_on_second_or_third(self):
         record = self._charge_record()
-        kb = bale_bot._group_reminder_keyboard("charge", "req1", record)
-        buttons = kb["inline_keyboard"][0]
-        self.assertEqual(buttons[0]["callback_data"], "charge:cancel:req1")
-        self.assertEqual(buttons[1]["callback_data"], "charge:urgent:req1")
+        kb1 = bale_bot._group_reminder_keyboard("charge", "req1", record, include_urgent=False)
+        self.assertEqual([b["callback_data"] for b in kb1["inline_keyboard"][0]], ["charge:cancel:req1"])
+        kb2 = bale_bot._group_reminder_keyboard("charge", "req1", record, include_urgent=True)
+        self.assertEqual([b["callback_data"] for b in kb2["inline_keyboard"][0]],
+                         ["charge:cancel:req1", "charge:urgent:req1"])
 
     def test_urgent_reminder_mentions_responsible_admins(self):
         record = self._charge_record()

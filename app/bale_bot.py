@@ -221,6 +221,7 @@ _load_charge_requests()
 # اگه بعد از این مدت هنوز کسی به درخواست شارژ جواب نداده باشه، یادآوری فرستاده می‌شه
 # (و هر بار که دوباره این مدت بگذره، دوباره یادآوری می‌ره، تا وقتی resolve بشه)
 CHARGE_REQUEST_REMINDER_SECONDS = 1800
+CHARGE_URGENT_REMINDER_COOLDOWN_SECONDS = 300
 
 # --- ریست رمز (گروه) ---
 RESET_TRIGGER_WORD = "رمز"
@@ -289,6 +290,7 @@ _load_reset_requests()
 
 # اگه بعد از این مدت هنوز کسی به درخواست ریست رمز جواب نداده باشه، یادآوری فرستاده می‌شه
 RESET_REQUEST_REMINDER_SECONDS = 1800
+RESET_URGENT_REMINDER_COOLDOWN_SECONDS = 300
 
 # --- اطلاع‌رسانی روزانه‌ی شیفت فردا ---
 # ساعت‌های ارسال از پنل (/schedule-times) مدیریت می‌شن؛ پیش‌فرض 15:00 و 23:00.
@@ -1015,6 +1017,10 @@ def handle_group_message(message: dict) -> None:
             send_message(chat_id, chunk)
 
 
+URGENT_REMINDER_BUTTON = "🔔 یادآوری فوری"
+URGENT_REMINDER_COOLDOWN_MESSAGE = "یادآوری فوری چند دقیقه پیش ارسال شده؛ کمی صبر کن و دوباره بزن."
+
+
 def _requester_cancel_keyboard(kind: str, request_id: str, record: dict) -> dict | None:
     """دکمه لغو رو فقط وقتی میسازیم که شناسه درخواست کننده رو ذخیره کرده باشیم.
 
@@ -1028,6 +1034,16 @@ def _requester_cancel_keyboard(kind: str, request_id: str, record: dict) -> dict
             {"text": CANCEL_REQUEST_BUTTON, "callback_data": f"{kind}:cancel:{request_id}"},
         ]]
     }
+
+
+def _group_reminder_keyboard(kind: str, request_id: str, record: dict) -> dict | None:
+    """دکمه‌های پیام یادآوری در گروه: لغو توسط درخواست کننده + یادآوری فوری مسئولین."""
+    buttons = []
+    cancel_kb = _requester_cancel_keyboard(kind, request_id, record)
+    if cancel_kb:
+        buttons.extend(cancel_kb["inline_keyboard"][0])
+    buttons.append({"text": URGENT_REMINDER_BUTTON, "callback_data": f"{kind}:urgent:{request_id}"})
+    return {"inline_keyboard": [buttons]}
 
 
 def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: str, requester_name: str,
@@ -1049,6 +1065,7 @@ def _notify_charge_admins(group_chat_id, answer_message_id: int | None, code: st
         "admin_message_ids": {},
         "group_reminder_ids": [],
         "last_reminded_at": time.time(),
+        "last_urgent_reminded_at": 0,
         "created_at": time.time(),
     }
 
@@ -1101,7 +1118,7 @@ def _remind_pending_charge_request(request_id: str, record: dict) -> None:
         f"⏰ هنوز مسئول شارژ به درخواست شارژ فروشگاه {record['code']} "
         f"(از طرف {record['requester_name']}) رسیدگی نکرده.",
         reply_to_message_id=record["answer_message_id"],
-        reply_markup=_requester_cancel_keyboard("charge", request_id, record),
+        reply_markup=_group_reminder_keyboard("charge", request_id, record),
     )
     if gr_msg_id is not None:
         record["group_reminder_ids"].append(gr_msg_id)
@@ -1210,6 +1227,7 @@ def _notify_reset_admins(group_chat_id, answer_message_id: int | None, kind: str
         "admin_message_ids": {},
         "group_reminder_ids": [],
         "last_reminded_at": time.time(),
+        "last_urgent_reminded_at": 0,
         "created_at": time.time(),
     }
 
@@ -1252,7 +1270,7 @@ def _remind_pending_reset_request(request_id: str, record: dict) -> None:
         f"⏰ هنوز مسئول ریست رمز به درخواست ریست رمز {label} {record['target']} "
         f"(از طرف {record['requester_name']}) رسیدگی نکرده.",
         reply_to_message_id=record["answer_message_id"],
-        reply_markup=_requester_cancel_keyboard("reset", request_id, record),
+        reply_markup=_group_reminder_keyboard("reset", request_id, record),
     )
     if gr_msg_id is not None:
         record["group_reminder_ids"].append(gr_msg_id)
@@ -1273,6 +1291,63 @@ def _maybe_remind_pending_reset_requests() -> None:
             _remind_pending_reset_request(request_id, record)
         except Exception as e:
             log.exception("خطا در ارسال یادآوری درخواست ریست رمز %s: %s", request_id, e)
+
+
+def _md_escape(text: str) -> str:
+    """برای ارسال متن در Markdown باله، کاراکترهای کنترلی را escape می‌کند."""
+    for ch in ("\\", "`", "*", "_", "[", "]", "(", ")"):
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
+def _request_admin_mentions(kind: str) -> str:
+    admins = charge_admins.list_all() if kind == "charge" else reset_admins.list_all()
+    mentions = []
+    for admin in admins:
+        uid = str(admin.get("user_id") or "").strip()
+        if not uid:
+            continue
+        name = str(admin.get("name") or "").strip() or f"مسئول {uid}"
+        mentions.append(f"[{_md_escape(name)}](uid:{uid})")
+    return " ".join(mentions)
+
+
+def _send_urgent_reminder(kind: str, request_id: str, record: dict) -> tuple[bool, str]:
+    """یادآوری فوری: مسئولین مربوطه را در گروه منشن می‌کند."""
+    now = time.time()
+    cooldown = CHARGE_URGENT_REMINDER_COOLDOWN_SECONDS if kind == "charge" else RESET_URGENT_REMINDER_COOLDOWN_SECONDS
+    last = float(record.get("last_urgent_reminded_at") or 0)
+    remaining = int(cooldown - (now - last))
+    if remaining > 0:
+        minutes = max(1, (remaining + 59) // 60)
+        return False, f"یادآوری فوری چند دقیقه پیش ارسال شده؛ حدود {minutes} دقیقه دیگر دوباره بزن."
+
+    mentions = _request_admin_mentions(kind)
+    if not mentions:
+        return False, "هیچ مسئولی برای این درخواست در پنل ثبت نشده."
+
+    if kind == "charge":
+        target_text = f"شارژ فروشگاه {record['code']}"
+        save = _save_charge_requests
+    else:
+        label = RESET_KIND_LABELS.get(record["kind"], record["kind"])
+        target_text = f"ریست رمز {label} {record['target']}"
+        save = _save_reset_requests
+
+    text = f"🔔 یادآوری فوری برای {target_text}\n{mentions}"
+    msg_id = send_message(
+        record["group_chat_id"],
+        text,
+        reply_to_message_id=record.get("answer_message_id"),
+        parse_mode="Markdown",
+    )
+    if msg_id is None:
+        return False, "ارسال یادآوری فوری ناموفق بود."
+
+    record["last_urgent_reminded_at"] = now
+    save()
+    log.info("یادآوری فوری %s %s ارسال شد.", kind, request_id)
+    return True, "یادآوری فوری ارسال شد 🔔"
 
 
 def _cancel_request_by_requester(kind: str, request_id: str, record: dict) -> None:
@@ -1493,6 +1568,21 @@ def handle_callback_query(callback_query: dict) -> None:
             return
         _cancel_request_by_requester(kind, request_id, record)
         answer_callback_query(cq_id, "درخواست لغو شد ❌")
+        return
+
+    # --- callback یادآوری فوری مسئولین ---
+    if data.startswith("charge:urgent:") or data.startswith("reset:urgent:"):
+        kind, _action, request_id = data.split(":", 2)
+        pool = _charge_requests if kind == "charge" else _reset_requests
+        record = pool.get(request_id)
+        if not record or str(chat_id) != str(record.get("group_chat_id")):
+            answer_callback_query(cq_id, "این درخواست پیدا نشد.")
+            return
+        if record["resolved"]:
+            answer_callback_query(cq_id, "این درخواست قبلاً پاسخ داده یا لغو شده.")
+            return
+        ok, msg = _send_urgent_reminder(kind, request_id, record)
+        answer_callback_query(cq_id, msg)
         return
 
     # --- callback تایید انجام / اشتباه بودن درخواست ریست رمز ---

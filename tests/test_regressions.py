@@ -294,6 +294,46 @@ class RequestCancellationTests(unittest.TestCase):
             else:
                 bale_bot._pending_reset[pending_key] = old_pending
 
+    def test_group_reminder_keyboard_has_cancel_and_urgent(self):
+        record = self._charge_record()
+        kb = bale_bot._group_reminder_keyboard("charge", "req1", record)
+        buttons = kb["inline_keyboard"][0]
+        self.assertEqual(buttons[0]["callback_data"], "charge:cancel:req1")
+        self.assertEqual(buttons[1]["callback_data"], "charge:urgent:req1")
+
+    def test_urgent_reminder_mentions_responsible_admins(self):
+        record = self._charge_record()
+        bale_bot._charge_requests["req1"] = record
+        cb = self._callback("charge", "req1", 999)
+        cb["data"] = "charge:urgent:req1"
+        with patch.object(bale_bot, "presence"), \
+             patch.object(bale_bot, "answer_callback_query") as answer, \
+             patch.object(bale_bot.charge_admins, "list_all", return_value=[{"user_id": "99", "name": "Ali"}]), \
+             patch.object(bale_bot, "send_message", return_value=77) as send, \
+             patch.object(bale_bot, "_save_charge_requests") as save:
+            bale_bot.handle_callback_query(cb)
+        answer.assert_called_once()
+        send.assert_called_once()
+        args, kwargs = send.call_args
+        self.assertEqual(args[0], -100)
+        self.assertIn("[Ali](uid:99)", args[1])
+        self.assertEqual(kwargs.get("parse_mode"), "Markdown")
+        save.assert_called_once()
+        self.assertGreater(record["last_urgent_reminded_at"], 0)
+
+    def test_urgent_reminder_cooldown_blocks_spam(self):
+        record = self._charge_record()
+        record["last_urgent_reminded_at"] = time.time()
+        bale_bot._charge_requests["req1"] = record
+        cb = self._callback("charge", "req1", 999)
+        cb["data"] = "charge:urgent:req1"
+        with patch.object(bale_bot, "presence"), \
+             patch.object(bale_bot, "answer_callback_query") as answer, \
+             patch.object(bale_bot, "send_message") as send:
+            bale_bot.handle_callback_query(cb)
+        send.assert_not_called()
+        self.assertIn("یادآوری فوری", str(answer.call_args))
+
     def test_duplicate_lookup_returns_id_needed_for_cancel_button(self):
         bale_bot._reset_requests["r3"] = {
             "group_chat_id": -100, "kind": "store", "target": "321",

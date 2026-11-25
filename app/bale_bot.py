@@ -1578,8 +1578,11 @@ def handle_callback_query(callback_query: dict) -> None:
         kind, _action, request_id = data.split(":", 2)
         pool = _charge_requests if kind == "charge" else _reset_requests
         record = pool.get(request_id)
-        if not record or str(chat_id) != str(record.get("group_chat_id")):
-            answer_callback_query(cq_id, "این درخواست پیدا نشد.")
+        requester_id = record.get("requester_user_id") if record else None
+        if (not record or requester_id is None
+                or str(chat_id) != str(record.get("group_chat_id"))
+                or clicking_admin_id != str(requester_id)):
+            answer_callback_query(cq_id, "فقط درخواست کننده می‌تونه این عملیات رو انجام بده.")
             return
         if record["resolved"]:
             answer_callback_query(cq_id, "این درخواست قبلاً پاسخ داده یا لغو شده.")

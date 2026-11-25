@@ -305,7 +305,7 @@ class RequestCancellationTests(unittest.TestCase):
     def test_urgent_reminder_mentions_responsible_admins(self):
         record = self._charge_record()
         bale_bot._charge_requests["req1"] = record
-        cb = self._callback("charge", "req1", 999)
+        cb = self._callback("charge", "req1", 42)
         cb["data"] = "charge:urgent:req1"
         with patch.object(bale_bot, "presence"), \
              patch.object(bale_bot, "answer_callback_query") as answer, \
@@ -322,11 +322,23 @@ class RequestCancellationTests(unittest.TestCase):
         save.assert_called_once()
         self.assertGreater(record["last_urgent_reminded_at"], 0)
 
+    def test_non_requester_cannot_urgent_remind(self):
+        record = self._charge_record()
+        bale_bot._charge_requests["req1"] = record
+        cb = self._callback("charge", "req1", 999)
+        cb["data"] = "charge:urgent:req1"
+        with patch.object(bale_bot, "presence"), \
+             patch.object(bale_bot, "answer_callback_query") as answer, \
+             patch.object(bale_bot, "send_message") as send:
+            bale_bot.handle_callback_query(cb)
+        send.assert_not_called()
+        self.assertIn("درخواست کننده", str(answer.call_args))
+
     def test_urgent_reminder_cooldown_blocks_spam(self):
         record = self._charge_record()
         record["last_urgent_reminded_at"] = time.time()
         bale_bot._charge_requests["req1"] = record
-        cb = self._callback("charge", "req1", 999)
+        cb = self._callback("charge", "req1", 42)
         cb["data"] = "charge:urgent:req1"
         with patch.object(bale_bot, "presence"), \
              patch.object(bale_bot, "answer_callback_query") as answer, \

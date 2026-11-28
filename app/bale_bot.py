@@ -18,6 +18,7 @@ import threading
 import time
 import logging
 import html
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import jdatetime
@@ -31,6 +32,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("bale_bot")
+_CALLBACK_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="cb")
 
 
 class _SecretRedactionFilter(logging.Filter):
@@ -2132,10 +2134,12 @@ def run() -> None:
                 except Exception as e:
                     log.exception("خطا در پردازش پیام: %s", e)
             elif callback_query:
-                try:
-                    handle_callback_query(callback_query)
-                except Exception as e:
-                    log.exception("خطا در پردازش callback_query: %s", e)
+                def _run_callback(cq=callback_query):
+                    try:
+                        handle_callback_query(cq)
+                    except Exception as e:
+                        log.exception("خطا در پردازش callback_query: %s", e)
+                _CALLBACK_EXECUTOR.submit(_run_callback)
 
         try:
             _maybe_send_schedule_announcement()

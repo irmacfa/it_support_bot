@@ -12,6 +12,7 @@ import shutil
 import threading
 import time
 from datetime import datetime, timedelta
+from functools import wraps
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -21,10 +22,11 @@ from fastapi import FastAPI, Request, UploadFile, File, Form, Body
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.gzip import GZipMiddleware
 
 from app import config, data_store, info_store, registration, charge_admins, reset_admins, groups, group_members, bale_bot, schedule_store, schedule_times, usage_stats
-from app.atomic_io import atomic_exchange_paths
+from app.atomic_io import atomic_exchange_paths, atomic_write_json
 from app import xlsx_sheet, region_experts, dataset_router, presence, separated_experts
 
 app_logger = logging.getLogger("it_support_panel")
@@ -764,6 +766,15 @@ def _finish_info_commit(destination: Path, previous: Path | None,
 _dataset_commit_lock = threading.RLock()
 
 
+def _with_dataset_lock(fn):
+    """اجرای عملیات تغییر دیتا تحت قفل سراسری."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _dataset_commit_lock:
+            return fn(*args, **kwargs)
+    return wrapper
+
+
 def _apply_dataset(key: str, staged: list[Path], mode: str, drop_missing: bool) -> tuple[bool, str, dict]:
     """Replace source files transactionally with the matching in-memory index.
 
@@ -915,6 +926,7 @@ async def upload_file(request: Request,
 @app.post("/upload/apply", response_class=HTMLResponse)
 @app.post("/stores/apply", response_class=HTMLResponse)
 @app.post("/info/apply", response_class=HTMLResponse)
+@_with_dataset_lock
 def upload_apply(request: Request, token: str = Form(...)):
     """مرحله‌ی دوم: تغییراتی که کاربر دیده و تأیید کرده اعمال می‌شود."""
     if not _is_authed(request):
@@ -929,27 +941,40 @@ def upload_apply(request: Request, token: str = Form(...)):
                                                           "دوباره آپلود کن.", "success": False}),
         )
 
-    mode, drop = "merge", False
-    meta: dict = {}
-    meta_file = folder / "_upload.json"
-    if meta_file.exists():
-        try:
-            meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            mode = meta.get("mode", "merge")
-            drop = bool(meta.get("drop_missing"))
-        except Exception:  # noqa: BLE001 - متادیتای خراب نباید جلوی اعمال را بگیرد
-            pass
+    try:
+        meta = json.loads((folder / "_upload.json").read_text(encoding="utf-8"))
+        mode = meta["mode"]
+        drop = bool(meta.get("drop_missing"))
+        routes = {key: [Path(p) for p in paths] for key, paths in meta["routes"].items()}
+        carried_sheets = meta.get("carried", {})
+        if (mode not in {"auto", "merge", "replace"} or not routes or not work_dir
+                or not isinstance(carried_sheets, dict)
+                or any(key not in DATASET_ORDER or not paths or any(
+                    not path.is_file() or not any(path.resolve().is_relative_to(root)
+                                                  for root in (folder, work_dir))
+                    for path in paths
+                ) for key, paths in routes.items())):
+            raise ValueError("Incomplete upload preview")
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        shutil.rmtree(folder, ignore_errors=True)
+        if work_dir:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        return templates.TemplateResponse(
+            "upload.html", _upload_ctx(request, flash={
+                "message": "پیش‌نمایش قابل اعمال نیست؛ فایل را دوباره آپلود کنید.",
+                "success": False,
+            }),
+        )
 
-    routes = {k: [Path(p) for p in v] for k, v in (meta.get("routes") or {}).items()}
     cards: dict[str, dict] = {}
     lines: list[str] = []
     ok_all = True
     try:
         for key in DATASET_ORDER:
-            staged = [p for p in (routes.get(key) or []) if p.exists()]
+            staged = routes.get(key)
             if not staged:
                 continue
-            carried = (meta.get("carried") or {}).get(str(staged[0]), [])
+            carried = carried_sheets.get(str(staged[0]), [])
             before = _get_excel_columns(_active_info_path()) if key == "info" else None
             try:
                 ok, msg, payload = _apply_dataset(key, staged, mode, drop)
@@ -973,7 +998,7 @@ def upload_apply(request: Request, token: str = Form(...)):
         if work_dir:
             shutil.rmtree(work_dir, ignore_errors=True)
 
-    if ok_all and lines and config.ADMIN_CHAT_ID:
+    if ok_all and config.ADMIN_CHAT_ID:
         bale_bot.send_message(config.ADMIN_CHAT_ID,
                               ("📄 فایل‌های فروشگاه آپدیت شد.\n" + "\n".join(lines))[:3000])
 
@@ -986,6 +1011,7 @@ def upload_apply(request: Request, token: str = Form(...)):
 @app.post("/upload/cancel", response_class=HTMLResponse)
 @app.post("/stores/cancel", response_class=HTMLResponse)
 @app.post("/info/cancel", response_class=HTMLResponse)
+@_with_dataset_lock
 def upload_cancel(request: Request, token: str = Form(...)):
     """آپلودِ تأییدنشده را دور می‌ریزد."""
     if not _is_authed(request):
@@ -1001,6 +1027,7 @@ def upload_cancel(request: Request, token: str = Form(...)):
     )
 
 
+@_with_dataset_lock
 def _rescan(request: Request, keys: tuple[str, ...]):
     """فقط فایل‌های فعلی دوباره خوانده می‌شوند (بدون آپلود جدید)."""
     if not _is_authed(request):
@@ -1034,14 +1061,6 @@ def info_rescan(request: Request):
 @app.get("/info/rescan", response_class=HTMLResponse)
 def info_rescan_page(request: Request):
     return RedirectResponse("/upload", status_code=302)
-
-
-def _with_dataset_lock(fn):
-    """اجرای عملیات تغییر دیتا تحت قفل سراسری."""
-    def wrapper(*args, **kwargs):
-        with _dataset_commit_lock:
-            return fn(*args, **kwargs)
-    return wrapper
 
 
 @_with_dataset_lock
@@ -1098,6 +1117,35 @@ def info_restore(request: Request, backup: str = Form(...)):
     return _restore(request, "info", backup)
 
 
+_schedule_upload_lock = threading.Lock()
+
+
+def _replace_schedule_pdf(contents: bytes) -> tuple[bool, str]:
+    path = schedule_store.PDF_PATH
+    with _schedule_upload_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        suffix = secrets.token_hex(8)
+        staged = path.with_name(f".{path.name}.upload-{suffix}")
+        previous = path.with_name(f".{path.name}.previous-{suffix}")
+        try:
+            staged.write_bytes(contents)
+            if path.exists():
+                shutil.copy2(path, previous)
+            os.replace(staged, path)
+            ok, message = schedule_store.reload_schedule()
+            if ok:
+                previous.unlink(missing_ok=True)
+            else:
+                if previous.exists():
+                    os.replace(previous, path)
+                    message += " فایل قبلی برگردانده شد."
+                else:
+                    path.unlink()
+            return ok, message
+        finally:
+            staged.unlink(missing_ok=True)
+
+
 @app.post("/schedule/upload", response_class=HTMLResponse)
 async def upload_schedule(request: Request, schedule_file: UploadFile = File(...)):
     if not _is_authed(request):
@@ -1106,7 +1154,7 @@ async def upload_schedule(request: Request, schedule_file: UploadFile = File(...
     # اگه کاربر فایل اکسل/CSV فروشگاه‌ها رو اشتباهی توی فرم شیفت داده، خودکار می‌فرستیمش
     # به بخش فایل فروشگاه‌ها، به‌جای اینکه بگیم «شیفت نامعتبر».
     if Path(_safe_filename(schedule_file.filename or "")).suffix.lower() in data_store.SUPPORTED_SUFFIXES:
-        return await upload_file(request=request, files=[schedule_file], mode="merge", drop_missing="")
+        return await upload_file(request=request, files=[schedule_file], info_file=None, mode="merge", drop_missing="")
 
     filename = schedule_file.filename or ""
     invalid_pdf_message = ("برنامه‌ی شیفت باید PDF باشه. اگه منظورت فایل اطلاعات "
@@ -1118,7 +1166,13 @@ async def upload_schedule(request: Request, schedule_file: UploadFile = File(...
              "schedule_success": False},
         )
 
-    contents = await schedule_file.read()
+    contents = await schedule_file.read(MAX_UPLOAD_FILE_BYTES + 1)
+    if len(contents) > MAX_UPLOAD_FILE_BYTES:
+        return templates.TemplateResponse(
+            "upload.html",
+            {**_upload_ctx(request), "schedule_message": "حجم PDF از سقف ۱۰۰ مگابایت بیشتر است.",
+             "schedule_success": False},
+        )
     if not contents.lstrip().startswith(b"%PDF-"):
         return templates.TemplateResponse(
             "upload.html",
@@ -1126,27 +1180,11 @@ async def upload_schedule(request: Request, schedule_file: UploadFile = File(...
              "schedule_success": False},
         )
 
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    previous_pdf = schedule_store.PDF_PATH.with_suffix(".pdf.previous")
-    if schedule_store.PDF_PATH.exists():
-        shutil.copy2(schedule_store.PDF_PATH, previous_pdf)
-    with open(schedule_store.PDF_PATH, "wb") as f:
-        f.write(contents)
-
-    ok, msg = schedule_store.reload_schedule()
-    if not ok:
-        if previous_pdf.exists():
-            shutil.copy2(previous_pdf, schedule_store.PDF_PATH)
-            schedule_store.reload_schedule()
-            msg += " فایل قبلی برگردانده شد."
-        else:
-            schedule_store.PDF_PATH.unlink(missing_ok=True)
-            msg += " فایل نامعتبر حذف شد؛ فایل قبلی وجود نداشت."
-    previous_pdf.unlink(missing_ok=True)
+    ok, msg = await run_in_threadpool(_replace_schedule_pdf, contents)
     ctx = _upload_ctx(request)
 
     if ok and config.ADMIN_CHAT_ID:
-        bale_bot.send_message(config.ADMIN_CHAT_ID, "📄 فایل شیفت آپدیت شد.")
+        await run_in_threadpool(bale_bot.send_message, config.ADMIN_CHAT_ID, "📄 فایل شیفت آپدیت شد.")
 
     return templates.TemplateResponse(
         "upload.html",
@@ -1171,7 +1209,7 @@ def schedule_list_page(request: Request):
 
 
 @app.post("/api/schedule/day")
-async def schedule_day_update(request: Request, payload: dict = Body(...)):
+def schedule_day_update(request: Request, payload: dict = Body(...)):
     """ویرایش یک روز از برنامه شیفت از داخل مودال صفحه‌ی /schedule."""
     if not _is_authed(request):
         return JSONResponse({"ok": False, "message": "نشست شما منقضی شده، دوباره وارد پنل بشید."}, status_code=401)
@@ -2742,9 +2780,7 @@ def _load_fields_config() -> dict:
 
 
 def _save_fields_config(cfg: dict) -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(FIELDS_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    atomic_write_json(FIELDS_CONFIG_PATH, cfg)
 
 
 def _get_excel_columns(excel_path, sheet_names: list[str] | None = None) -> dict[str, list[str]]:
@@ -2834,19 +2870,27 @@ def get_fields(file_type: str):
 
 
 @app.post("/api/fields/{file_type}")
+@_with_dataset_lock
 def save_fields(file_type: str, request: dict):
     """ترتیب و وضعیت نمایش فیلدها رو ذخیره می‌کنه."""
-    cfg = _load_fields_config()
-    if file_type not in cfg:
-        cfg[file_type] = {}
+    if file_type not in {"stores", "info"}:
+        return JSONResponse({"error": "نوع فایل نامعتبر"}, status_code=400)
 
+    sheets = {}
     for sheet_name, sheet_data in request.items():
-        cfg[file_type][sheet_name] = {
-            "order": sheet_data.get("order", []),
-            "hidden": sheet_data.get("hidden", []),
-            "labels": sheet_data.get("labels", {}),
-        }
+        if not isinstance(sheet_data, dict):
+            return JSONResponse({"error": "تنظیمات شیت نامعتبر است."}, status_code=422)
+        order = sheet_data.get("order", [])
+        hidden = sheet_data.get("hidden", [])
+        labels = sheet_data.get("labels", {})
+        if (not isinstance(order, list) or not all(isinstance(c, str) for c in order)
+                or not isinstance(hidden, list) or not all(isinstance(c, str) for c in hidden)
+                or not isinstance(labels, dict) or not all(isinstance(v, str) for v in labels.values())):
+            return JSONResponse({"error": "تنظیمات شیت نامعتبر است."}, status_code=422)
+        sheets[sheet_name] = {"order": order, "hidden": hidden, "labels": labels}
 
+    cfg = _load_fields_config()
+    cfg.setdefault(file_type, {}).update(sheets)
     _save_fields_config(cfg)
     return {"ok": True, "message": "تنظیمات فیلدها ذخیره شد."}
 
@@ -2867,6 +2911,7 @@ def _announce_kind_ok(kind: str) -> str | None:
     return None
 
 
+@_with_dataset_lock
 def _apply_expert_change(action, *args) -> dict:
     """تغییر کارشناس (تکی یا گروهی): اول بکاپ، بعد اعمال، و در صورت خطا برگردان."""
     backup = _make_info_backup()
@@ -2882,7 +2927,7 @@ def _apply_expert_change(action, *args) -> dict:
 
 
 @app.post("/api/expert/store")
-async def set_store_expert(request: dict):
+def set_store_expert(request: dict):
     """کارشناسِ یک فروشگاه را از تب «لیست کارشناسان» عوض می‌کند."""
     code = str(request.get("code") or "").strip()
     if not code:
@@ -2894,7 +2939,7 @@ async def set_store_expert(request: dict):
 
 
 @app.post("/api/expert/bulk-store")
-async def bulk_store_expert(request: dict):
+def bulk_store_expert(request: dict):
     """ذخیره‌ی گروهیِ dropdownهای تب «لیست کارشناسان».
 
     به‌جای اینکه با هر انتخاب یک درخواست و رفرش بفرسته، همه‌ی انتخاب‌های
@@ -2936,7 +2981,7 @@ async def save_region_experts(request: dict):
 
 
 @app.post("/api/announce/preview")
-async def announce_preview(request: dict):
+def announce_preview(request: dict):
     """متن پیام اطلاع‌رسانی را می‌سازد ولی چیزی نمی‌فرستد."""
     kind = str(request.get("kind") or "").strip()
     bad = _announce_kind_ok(kind)
@@ -2950,7 +2995,7 @@ async def announce_preview(request: dict):
 
 
 @app.post("/api/announce/send")
-async def announce_send(request: dict):
+def announce_send(request: dict):
     """ارسال اطلاع‌رسانی به گروه. متن از سمت سرور ساخته می‌شود.
 
     عمداً متنِ فرستاده‌شده از کلاینت گرفته نمی‌شود تا پیامی که می‌رود همیشه
@@ -2988,7 +3033,7 @@ async def announce_send(request: dict):
 
 
 @app.post("/api/expert/rename")
-async def rename_expert(request: dict):
+def rename_expert(request: dict):
     """اسم یک کارشناس را روی همه‌ی فروشگاه‌هایش عوض می‌کند."""
     old = str(request.get("from") or "").strip()
     new = str(request.get("to") or "").strip()
@@ -3003,7 +3048,7 @@ async def rename_expert(request: dict):
 
 
 @app.post("/api/expert/bulk")
-async def bulk_expert(request: dict):
+def bulk_expert(request: dict):
     """ویرایش گروهی کارشناس انفورماتیک بر اساس محدوده‌ی کد فروشگاه.
 
     دو حالت داره: `preview` (هیچ تغییری نمی‌ده، فقط می‌گه چند کد و کدوم کارشناس
@@ -3029,17 +3074,10 @@ async def bulk_expert(request: dict):
     if not expert:
         return JSONResponse({"ok": False, "message": "نام کارشناس رو وارد کن."}, status_code=400)
 
-    backup = _make_info_backup()
-    try:
-        result = info_store.bulk_assign_expert(code_from, code_to, expert, only_empty)
-    except Exception as exc:  # noqa: BLE001
-        # اگه نوشتن شکست خورد، نسخه‌ی قبلی برگردونه
-        if backup:
-            _restore_info_backup(backup)
-        return JSONResponse({"ok": False, "message": f"خطا: {exc}"}, status_code=400)
+    result = _apply_expert_change(info_store.bulk_assign_expert, code_from, code_to, expert, only_empty)
+    if not result["ok"]:
+        return JSONResponse(result, status_code=400)
 
-    result["ok"] = True
-    result["backup"] = backup
     if not result.get("changed"):
         result["message"] = "هیچ فروشگاهی با این محدوده و شرط‌ها پیدا نشد."
     elif result.get("overwritten"):
@@ -3051,6 +3089,7 @@ async def bulk_expert(request: dict):
 
 
 @app.post("/api/store-list/columns")
+@_with_dataset_lock
 def save_store_list_columns(request: dict):
     """ذخیره‌ی انتخاب ستون‌های فهرست فروشگاه‌ها."""
     hidden = request.get("hidden")
@@ -3067,6 +3106,7 @@ def get_info_sheet_titles():
 
 
 @app.post("/api/sheet-titles/info")
+@_with_dataset_lock
 def save_info_sheet_titles(request: dict):
     """ذخیره‌ی عنوان سفارشی/حذف تیتر شیت‌های اطلاعات فروشگاه‌ها."""
     info_store.save_sheet_display(request)

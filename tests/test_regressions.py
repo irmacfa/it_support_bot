@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from app import bale_bot, config, info_store, registration, schedule_store, separated_experts
 from app.main import app, _safe_filename, _info_target_for_backup, _restore_info_file
@@ -386,3 +387,82 @@ class RequestCancellationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PanelWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        member_count = patch.object(bale_bot, "get_chat_member_count", return_value=None)
+        member_count.start()
+        self.addCleanup(member_count.stop)
+        self.client = AsyncClient(transport=ASGITransport(app, raise_app_exceptions=False),
+                                 base_url="http://testserver")
+        self.addAsyncCleanup(self.client.aclose)
+        self.headers = {"origin": "http://testserver"}
+        await self.client.post("/login", data={"password": config.ADMIN_PASSWORD},
+                         headers=self.headers, follow_redirects=False)
+
+    async def test_schedule_excel_fallback_reaches_dataset_router(self):
+        from app import main
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(config, "UPLOAD_STAGING_DIR", Path(tmp)), \
+             patch.object(main.dataset_router, "route", return_value={}) as route, \
+             patch.object(main.dataset_router, "summary", return_value="preview"):
+            response = await self.client.post("/schedule/upload", headers=self.headers,
+                                        files={"schedule_file": ("stores.csv", b"code\n123\n")})
+        self.assertEqual(response.status_code, 200)
+        route.assert_called_once()
+
+    async def test_rejected_pdf_preserves_manual_schedule_edits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf = Path(tmp) / "schedule.pdf"
+            pdf.write_bytes(b"old")
+            with patch.object(schedule_store, "PDF_PATH", pdf), \
+                 patch.object(schedule_store, "reload_schedule",
+                              return_value=(False, "invalid")) as reload_schedule:
+                response = await self.client.post("/schedule/upload", headers=self.headers,
+                                            files={"schedule_file": ("shift.pdf", b"%PDF-invalid")})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(pdf.read_bytes(), b"old")
+            reload_schedule.assert_called_once()
+
+    async def test_incomplete_preview_reports_failure(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(config, "UPLOAD_STAGING_DIR", Path(tmp)):
+            (Path(tmp) / "pending").mkdir()
+            response = await self.client.post("/upload/apply", headers=self.headers,
+                                        data={"token": "pending"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue("پیش‌نمایش قابل اعمال نیست" in response.text)
+
+    async def test_invalid_field_settings_do_not_overwrite_saved_values(self):
+        from app import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fields.json"
+            path.write_text('{"info": {}}', encoding="utf-8")
+            with patch.object(main, "FIELDS_CONFIG_PATH", path):
+                response = await self.client.post("/api/fields/info", headers=self.headers,
+                                            json={"Sheet1": {"order": None}})
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(json.loads(path.read_text()), {"info": {}})
+
+    async def test_preview_can_apply_original_unsplit_upload(self):
+        from app import main
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(config, "UPLOAD_STAGING_DIR", Path(tmp)), \
+             patch.object(main, "_apply_dataset", return_value=(True, "applied", {})) as apply:
+            folder = Path(tmp) / "pending"
+            folder.mkdir()
+            (Path(tmp) / "pending-routed").mkdir()
+            source = folder / "stores.csv"
+            source.write_text("code\n123\n", encoding="utf-8")
+            (folder / "_upload.json").write_text(
+                json.dumps({"mode": "merge", "routes": {"charge": [str(source)]}}), encoding="utf-8",
+            )
+            response = await self.client.post("/upload/apply", headers=self.headers,
+                                              data={"token": "pending"})
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(folder.exists())
+        apply.assert_called_once_with("charge", [source], "merge", False)

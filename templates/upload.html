@@ -547,7 +547,7 @@ function renderSheetTabs() {
 
     const div = document.createElement('div');
     div.className = 'sheet-content' + (idx === 0 ? ' active' : '');
-    div.id = 'sheet-' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+    div.id = 'sheet-' + encodeURIComponent(sheet);
     contents.appendChild(div);
 
     renderFields(div, sheet);
@@ -559,7 +559,7 @@ function switchSheet(sheet, tab) {
   document.querySelectorAll('.sheet-content').forEach(c => c.classList.remove('active'));
 
   if (tab) tab.classList.add('active');
-  const id = 'sheet-' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+  const id = 'sheet-' + encodeURIComponent(sheet);
   document.getElementById(id).classList.add('active');
 }
 
@@ -602,16 +602,15 @@ function renderFields(container, sheet) {
   // عنوان شیت (فقط برای فایل اطلاعات) — قابل تغییر نام یا حذف تیتر از نتیجه
   if (currentFileType === 'info') {
     const title = sheetTitles[sheet] || {label: sheet, show: true};
-    const safeId = 'SHEET_' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
     const box = document.createElement('div');
     box.className = 'sheet-title-box';
     box.innerHTML = [
       '<div class="field-label-wrap">',
       '<span style="font-size:12px;color:var(--muted);">عنوان در نتیجه:</span>',
-      `<span class="field-label" id="title_${safeId}"></span>`,
-      `<input class="field-label-input" id="tinput_${safeId}" style="display:none">`,
-      `<button class="btn-icon edit" id="tedit_${safeId}" title="ویرایش">✏️</button>`,
-      `<button class="btn-icon confirm" id="tconfirm_${safeId}" title="تایید" style="display:none">✅</button>`,
+      `<span class="field-label"></span>`,
+      `<input class="field-label-input" style="display:none">`,
+      `<button class="btn-icon edit" title="ویرایش">✏️</button>`,
+      `<button class="btn-icon confirm" title="تایید" style="display:none">✅</button>`,
       '</div>',
       '<label class="field-toggle" title="نمایش عنوان در نتیجه">',
       `<input type="checkbox" ${title.show ? 'checked' : ''}>`,
@@ -653,17 +652,15 @@ function renderFields(container, sheet) {
     item.className = 'field-item' + (hiddenSet.has(col) ? ' hidden-field' : '');
     item.draggable = true;
     item.dataset.col = col;
-    item.dataset.sheet = sheet;
 
-    const safeId = col.replace(/[^a-zA-Z0-9]/g, '_');
     const label = labels[col] || col;
     item.innerHTML = [
       '<span class="field-handle">⠿</span>',
       '<div class="field-label-wrap">',
-      `<span class="field-label" id="label_${safeId}">${escapeHtml(label)}</span>`,
-      `<input class="field-label-input" id="input_${safeId}" value="${escapeHtml(label)}" style="display:none">`,
-      `<button class="btn-icon edit" id="edit_${safeId}" title="ویرایش">✏️</button>`,
-      `<button class="btn-icon confirm" id="confirm_${safeId}" title="تایید" style="display:none">✅</button>`,
+      `<span class="field-label">${escapeHtml(label)}</span>`,
+      `<input class="field-label-input" value="${escapeHtml(label)}" style="display:none">`,
+      `<button class="btn-icon edit" title="ویرایش">✏️</button>`,
+      `<button class="btn-icon confirm" title="تایید" style="display:none">✅</button>`,
       '</div>',
       `<span class="field-col-name">(${escapeHtml(col)})</span>`,
       '<label class="field-toggle">',
@@ -685,7 +682,7 @@ function renderFields(container, sheet) {
     item.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (dragSrc && dragSrc !== item) {
+      if (dragSrc && dragSrc !== item && dragSrc.parentNode === container) {
         item.style.borderTop = '2px solid var(--accent)';
       }
     });
@@ -693,7 +690,7 @@ function renderFields(container, sheet) {
     item.addEventListener('drop', e => {
       e.preventDefault();
       item.style.borderTop = '';
-      if (dragSrc && dragSrc !== item) {
+      if (dragSrc && dragSrc !== item && dragSrc.parentNode === container) {
         const items = [...container.querySelectorAll('.field-item')];
         const srcIdx = items.indexOf(dragSrc);
         const tgtIdx = items.indexOf(item);
@@ -706,62 +703,59 @@ function renderFields(container, sheet) {
       }
     });
     item.querySelector('input[type="checkbox"]').addEventListener('change', function () {
-      toggleField(sheet, col, this.checked);
+      toggleField(sheet, col, item, this.checked);
     });
-    item.querySelector('.edit').addEventListener('click', () => startEdit(sheet, col));
-    item.querySelector('.confirm').addEventListener('click', () => confirmEdit(sheet, col));
+    item.querySelector('.edit').addEventListener('click', () => startEdit(item));
+    item.querySelector('.confirm').addEventListener('click', () => confirmEdit(sheet, col, item));
     item.querySelector('.field-label-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); confirmEdit(sheet, col); }
+      if (e.key === 'Enter') { e.preventDefault(); confirmEdit(sheet, col, item); }
     });
     item.querySelector('.field-label-input').addEventListener('blur', () => {
       if (item.querySelector('.field-label-input').style.display === 'none') return;
-      confirmEdit(sheet, col);
+      confirmEdit(sheet, col, item);
     });
 
     container.appendChild(item);
   });
 }
 
-function toggleField(sheet, col, visible) {
+function toggleField(sheet, col, item, visible) {
   if (!fieldsData[sheet]) return;
-  const hidden = fieldsData[sheet].hidden || [];
+  const hidden = new Set(fieldsData[sheet].hidden || []);
   if (visible) {
-    fieldsData[sheet].hidden = hidden.filter(c => c !== col);
+    hidden.delete(col);
   } else {
-    if (!hidden.includes(col)) hidden.push(col);
+    hidden.add(col);
   }
-  const item = document.querySelector(`.field-item[data-col="${col}"]`);
-  if (item) item.classList.toggle('hidden-field', !visible);
+  fieldsData[sheet].hidden = [...hidden];
+  item.classList.toggle('hidden-field', !visible);
 }
 
-function startEdit(sheet, col) {
-  const id = col.replace(/[^a-zA-Z0-9]/g, '_');
-  document.getElementById('label_' + id).style.display = 'none';
-  document.getElementById('edit_' + id).style.display = 'none';
-  const input = document.getElementById('input_' + id);
+function startEdit(item) {
+  item.querySelector('.field-label').style.display = 'none';
+  item.querySelector('.edit').style.display = 'none';
+  const input = item.querySelector('.field-label-input');
   input.style.display = 'block';
   input.focus();
-  document.getElementById('confirm_' + id).style.display = 'inline-flex';
+  item.querySelector('.confirm').style.display = 'inline-flex';
 }
 
-function confirmEdit(sheet, col) {
-  const id = col.replace(/[^a-zA-Z0-9]/g, '_');
-  const input = document.getElementById('input_' + id);
-  const label = document.getElementById('label_' + id);
+function confirmEdit(sheet, col, item) {
+  const input = item.querySelector('.field-label-input');
+  const label = item.querySelector('.field-label');
   const newLabel = input.value.trim() || col;
   label.textContent = newLabel;
   label.style.display = 'block';
   input.style.display = 'none';
-  document.getElementById('edit_' + id).style.display = 'inline-flex';
-  document.getElementById('confirm_' + id).style.display = 'none';
-  // save to fieldsData
+  item.querySelector('.edit').style.display = 'inline-flex';
+  item.querySelector('.confirm').style.display = 'none';
   if (!fieldsData[sheet]) return;
   if (!fieldsData[sheet].labels) fieldsData[sheet].labels = {};
   fieldsData[sheet].labels[col] = newLabel;
 }
 
 function updateOrderFromDOM(sheet) {
-  const id = 'sheet-' + sheet.replace(/[^a-zA-Z0-9]/g, '_');
+  const id = 'sheet-' + encodeURIComponent(sheet);
   const container = document.getElementById(id);
   if (!container || !fieldsData[sheet]) return;
   const items = [...container.querySelectorAll('.field-item')];
@@ -789,13 +783,16 @@ function commitOpenInputs() {
 
 async function saveFieldsConfig() {
   commitOpenInputs();
-  Object.keys(fieldsData).forEach(sheet => updateOrderFromDOM(sheet));
+  const fields = Object.fromEntries(Object.entries(fieldsData).map(([sheet, data]) => {
+    updateOrderFromDOM(sheet);
+    return [sheet, {order: data.columns, hidden: data.hidden, labels: data.labels}];
+  }));
 
   try {
     const resp = await fetch(`/api/fields/${currentFileType}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(fieldsData)
+      body: JSON.stringify(fields)
     });
     const result = await resp.json();
     if (!result.ok) {
